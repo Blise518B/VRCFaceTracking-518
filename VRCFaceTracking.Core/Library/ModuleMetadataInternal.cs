@@ -48,4 +48,40 @@ public class ModuleMetadataInternal : INotifyPropertyChanged
             PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(UsingExpression)));
         }
     }
+
+    private bool _isDormant;
+    private string _statusNote = string.Empty;
+
+    /// <summary>
+    /// Installed but deliberately not started this session, because source detection found
+    /// nothing for it. Shown greyed out rather than hidden, so it's obvious the module is
+    /// present and simply idle rather than missing.
+    /// </summary>
+    public bool IsDormant
+    {
+        get => _isDormant;
+        set
+        {
+            _isDormant = value;
+            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(IsDormant)));
+            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(IsRunning)));
+            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(CardOpacity)));
+        }
+    }
+
+    /// <summary>Why this module is dormant, shown on its card.</summary>
+    public string StatusNote
+    {
+        get => _statusNote;
+        set
+        {
+            _statusNote = value;
+            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(StatusNote)));
+        }
+    }
+
+    public bool IsRunning => !_isDormant;
+
+    /// <summary>Dimmed when dormant. Bound straight to the card's Opacity.</summary>
+    public double CardOpacity => _isDormant ? 0.45 : 1.0;
 }

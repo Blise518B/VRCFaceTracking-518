@@ -226,7 +226,8 @@ public sealed partial class CurvesPage : Page
         {
             FontFamily = new FontFamily("Consolas"),
             FontSize = 12,
-            Foreground = ThemeBrush("TextFillColorSecondaryBrush", 150, 150, 150),
+            // Cyan for live numbers, matching how the GPU dashboard colours its values
+            Foreground = ThemeBrush("Cat518Cyan", 0x56, 0xd9, 0xf2),
             Margin = new Thickness(0, 4, 0, 4)
         };
 

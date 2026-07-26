@@ -99,13 +99,11 @@
                     <labs:SettingsExpander.Items>
                         <labs:SettingsCard Header="Module restarts"
                                            Description="How many times a crashed tracking module was automatically restarted">
-                            <TextBlock Text="{x:Bind ViewModel.AutoRestart.ModuleRestartCount, Mode=OneWay}"
-                                       Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
+                            <TextBlock Text="{x:Bind ViewModel.AutoRestart.ModuleRestartCount, Mode=OneWay}" FontFamily="Consolas" Foreground="{StaticResource Cat518Cyan}"/>
                         </labs:SettingsCard>
                         <labs:SettingsCard Header="App relaunches"
                                            Description="How many times VRCFaceTracking was automatically relaunched after a crash">
-                            <TextBlock Text="{x:Bind ViewModel.AutoRestart.AppRelaunchCount, Mode=OneWay}"
-                                       Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
+                            <TextBlock Text="{x:Bind ViewModel.AutoRestart.AppRelaunchCount, Mode=OneWay}" FontFamily="Consolas" Foreground="{StaticResource Cat518Purple}"/>
                         </labs:SettingsCard>
                         <labs:SettingsCard Header="Recent restarts"
                                            HorizontalContentAlignment="Stretch"
@@ -144,8 +142,7 @@
                         <labs:SettingsCard Header="Most recent crash"
                                            HorizontalContentAlignment="Left"
                                            ContentAlignment="Vertical">
-                            <TextBlock Text="{x:Bind LastCrashText, Mode=OneWay}"
-                                       Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                            <TextBlock Text="{x:Bind LastCrashText, Mode=OneWay}" FontFamily="Consolas" Foreground="{StaticResource Cat518Yellow}"
                                        TextWrapping="Wrap"/>
                         </labs:SettingsCard>
                         <labs:SettingsCard Header="Saved reports"

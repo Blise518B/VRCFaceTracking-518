@@ -483,6 +483,24 @@ public class UnifiedLibManager : ILibManager
                 _logger.LogInformation(
                     "Source detection: starting {started} of {total} installed modules. See the Sources page for why.",
                     modulePaths.Count, modules.Count);
+
+                // List the skipped ones greyed out instead of dropping them: a module that
+                // silently disappears looks uninstalled rather than idle.
+                var skipped = _moduleActivationService.Evaluate(modules).Where(d => !d.WillStart).ToList();
+                _dispatcherService.Run(() =>
+                {
+                    foreach (var decision in skipped)
+                    {
+                        LoadedModulesMetadata.Add(new ModuleMetadataInternal
+                        {
+                            Name = decision.DisplayName,
+                            Active = false,
+                            IsDormant = true,
+                            StatusNote = decision.Reason,
+                            StaticImages = new List<Stream>(),
+                        });
+                    }
+                });
             }
 
             // Load all modules

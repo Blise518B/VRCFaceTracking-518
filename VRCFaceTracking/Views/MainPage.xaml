@@ -491,7 +491,9 @@
             <ItemsControl ItemsSource="{x:Bind ViewModel.LibManager.LoadedModulesMetadata}">
                 <ItemsControl.ItemTemplate>
                     <DataTemplate x:DataType="models:ModuleMetadataInternal">
-                        <Border CornerRadius="6" BorderThickness="1" Background="{ThemeResource LayerFillColorDefaultBrush}">
+                        <Border CornerRadius="6" BorderThickness="1"
+                                Background="{ThemeResource LayerFillColorDefaultBrush}"
+                                Opacity="{x:Bind CardOpacity, Mode=OneWay}">
                             <Grid Margin="15, 15">
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="Auto"/>
@@ -526,11 +528,25 @@
                                         <TextBlock Visibility="{x:Bind UsingEye, Mode=OneWay}" Foreground="{ThemeResource TextFillColorDisabledBrush}" x:Uid="EyeTrackingInactive" />
                                         <TextBlock Visibility="{x:Bind UsingExpression, Mode=OneWay}" Foreground="{ThemeResource TextFillColorDisabledBrush}" x:Uid="FaceTrackingInactive" />
                                     </StackPanel>
+
+                                    <!-- Installed but not started this session -->
+                                    <StackPanel Visibility="{x:Bind IsDormant, Mode=OneWay, Converter={StaticResource BoolVisConverter}}">
+                                        <TextBlock Text="INSTALLED - NOT IN USE"
+                                                   FontSize="11"
+                                                   FontWeight="Bold"
+                                                   Foreground="{StaticResource Cat518Yellow}"/>
+                                        <TextBlock Text="{x:Bind StatusNote, Mode=OneWay}"
+                                                   FontFamily="Consolas"
+                                                   FontSize="11"
+                                                   TextWrapping="Wrap"
+                                                   Foreground="{ThemeResource TextFillColorTertiaryBrush}"/>
+                                    </StackPanel>
                                 </StackPanel>
                                 <StackPanel Grid.Column="3" Orientation="Horizontal" VerticalAlignment="Center">
-                                    <ToggleButton Margin="15, 0, 25, 0" 
-                                                      Padding="15" 
-                                                      x:Uid="ToggleTracking" 
+                                    <ToggleButton Margin="15, 0, 25, 0"
+                                                      Padding="15"
+                                                      x:Uid="ToggleTracking"
+                                                      Visibility="{x:Bind IsRunning, Mode=OneWay, Converter={StaticResource BoolVisConverter}}"
                                                       IsChecked="{x:Bind Active, Mode=TwoWay}"/>
                                 </StackPanel>
                             </Grid>
@@ -550,27 +566,27 @@
                         <ColumnDefinition Width="Auto"/>
                     </Grid.ColumnDefinitions>
                     <StackPanel Orientation="Horizontal" Grid.Column="0">
-                        <FontIcon Margin="10, 4" FontFamily="{StaticResource SymbolThemeFontFamily}" Glyph="&#xEC05;" FontSize="20"/>
+                        <FontIcon Margin="10, 4" FontFamily="{StaticResource SymbolThemeFontFamily}" Glyph="&#xEC05;" FontSize="20" Foreground="{StaticResource Cat518Green}"/>
                         <StackPanel Margin="20, 4" Orientation="Vertical">
                             <TextBlock FontSize="15" Style="{ThemeResource SubtitleTextBlockStyle}" x:Uid="OSCStatus"/>
                             <StackPanel Orientation="Horizontal" Spacing="5" Visibility="{x:Bind ViewModel.OscTarget.IsConnected}">
                                 <TextBlock Foreground="{ThemeResource TextFillColorSecondaryBrush}" x:Uid="Listening_on_Port"/>
-                                <TextBlock Foreground="{ThemeResource TextFillColorSecondaryBrush}" Text="{x:Bind ViewModel.OscTarget.InPort, Mode=OneWay}"/>
+                                <TextBlock FontFamily="Consolas" Foreground="{StaticResource Cat518Cyan}" Text="{x:Bind ViewModel.OscTarget.InPort, Mode=OneWay}"/>
                             </StackPanel>
                             <StackPanel Orientation="Horizontal" Spacing="5">
                                 <TextBlock Foreground="{ThemeResource TextFillColorSecondaryBrush}" x:Uid="Sending_on_Port"/>
-                                <TextBlock Foreground="{ThemeResource TextFillColorSecondaryBrush}" Text="{x:Bind ViewModel.OscTarget.OutPort, Mode=OneWay}"/>
+                                <TextBlock FontFamily="Consolas" Foreground="{StaticResource Cat518Cyan}" Text="{x:Bind ViewModel.OscTarget.OutPort, Mode=OneWay}"/>
                             </StackPanel>
                         </StackPanel>
                     </StackPanel>
 
                     <StackPanel Margin="15, 0, 25, 0" Grid.Column="2" Orientation="Vertical" VerticalAlignment="Center">
                         <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Spacing="3">
-                            <TextBlock HorizontalTextAlignment="Right" VerticalAlignment="Center" Foreground="{ThemeResource TextFillColorSecondaryBrush}" Text="{x:Bind ViewModel.MessagesInPerSec, Mode=OneWay}"/>
+                            <TextBlock HorizontalTextAlignment="Right" VerticalAlignment="Center" FontFamily="Consolas" Foreground="{StaticResource Cat518Cyan}" Text="{x:Bind ViewModel.MessagesInPerSec, Mode=OneWay}"/>
                             <TextBlock HorizontalAlignment="Right" VerticalAlignment="Center" Foreground="{ThemeResource TextFillColorSecondaryBrush}" x:Uid="msIncoming"/>
                         </StackPanel>
                         <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Spacing="3">
-                            <TextBlock HorizontalTextAlignment="Right" VerticalAlignment="Center" Foreground="{ThemeResource TextFillColorSecondaryBrush}" Text="{x:Bind ViewModel.MessagesOutPerSec, Mode=OneWay}"/>
+                            <TextBlock HorizontalTextAlignment="Right" VerticalAlignment="Center" FontFamily="Consolas" Foreground="{StaticResource Cat518Purple}" Text="{x:Bind ViewModel.MessagesOutPerSec, Mode=OneWay}"/>
                             <TextBlock HorizontalAlignment="Right" VerticalAlignment="Center" Foreground="{ThemeResource TextFillColorSecondaryBrush}" x:Uid="msOutgoing"/>
                         </StackPanel>
                     </StackPanel>
