@@ -179,9 +179,25 @@ public static class Program
         var oscQuery = services.GetRequiredService<OscQueryService>();
         var oscTarget = services.GetRequiredService<IOscTarget>();
 
-        Console.Clear();
-        Console.CursorVisible = false;
+        // A redirected stdout (SteamVR's log capture, `lite.exe > file`) has no
+        // console buffer, so Clear/SetCursorPosition throw "handle is invalid".
+        // In-place rendering only makes sense on a real console; otherwise fall
+        // back to printing a snapshot every few seconds.
+        var interactive = !Console.IsOutputRedirected;
+        if (interactive)
+        {
+            try
+            {
+                Console.Clear();
+                Console.CursorVisible = false;
+            }
+            catch (IOException)
+            {
+                interactive = false;
+            }
+        }
 
+        var lastPlainPrint = DateTime.MinValue;
         while (!token.IsCancellationRequested)
         {
             UpdateRates();
@@ -232,7 +248,20 @@ public static class Program
             lines.Add("  Settings, curves and calibration live in the full app.");
             lines.Add("  Ctrl+C to exit.");
 
-            Draw(lines);
+            if (interactive)
+            {
+                Draw(lines);
+            }
+            else if (DateTime.Now - lastPlainPrint >= TimeSpan.FromSeconds(5))
+            {
+                // Sequential snapshots for logs/pipes - no cursor tricks, low volume
+                lastPlainPrint = DateTime.Now;
+                foreach (var line in lines)
+                {
+                    Console.WriteLine(line);
+                }
+                Console.WriteLine();
+            }
 
             try
             {
@@ -244,7 +273,17 @@ public static class Program
             }
         }
 
-        Console.CursorVisible = true;
+        if (interactive)
+        {
+            try
+            {
+                Console.CursorVisible = true;
+            }
+            catch (IOException)
+            {
+                // Console vanished mid-run; nothing to restore
+            }
+        }
     }
 
     private static void UpdateRates()

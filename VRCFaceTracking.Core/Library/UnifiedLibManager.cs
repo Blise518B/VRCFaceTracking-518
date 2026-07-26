@@ -70,7 +70,11 @@ public class UnifiedLibManager : ILibManager
         _autoRestartService = autoRestartService;
 
         LoadedModulesMetadata = new ObservableCollection<ModuleMetadataInternal>();
-        _sandboxProcessPath = Path.GetFullPath(RuntimeInformation.IsOSPlatform(OSPlatform.Windows) ? "VRCFaceTracking.ModuleProcess.exe" : "VRCFaceTracking.ModuleProcess");
+        // Resolve next to our own binaries, NOT the working directory: SteamVR
+        // (and anything else) can launch us with an arbitrary cwd, which made
+        // the Lite exe die at startup with "failed to find sandbox process".
+        _sandboxProcessPath = Path.Combine(AppContext.BaseDirectory,
+            RuntimeInformation.IsOSPlatform(OSPlatform.Windows) ? "VRCFaceTracking.ModuleProcess.exe" : "VRCFaceTracking.ModuleProcess");
         if ( !File.Exists(_sandboxProcessPath) )
         {
             // @TODO: Better error handling
