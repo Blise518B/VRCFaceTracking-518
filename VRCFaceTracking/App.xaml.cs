@@ -17,6 +17,7 @@ using VRCFaceTracking.Core.mDNS;
 using VRCFaceTracking.Core.Models;
 using VRCFaceTracking.Core.OSC.Query.mDNS;
 using VRCFaceTracking.Core.Params.Data;
+using VRCFaceTracking.Core.Params.Data.Mutation;
 using VRCFaceTracking.Core.Services;
 using VRCFaceTracking.Models;
 using VRCFaceTracking.Services;
@@ -232,6 +233,22 @@ public partial class App : Application
         // Must load before ActivationService reaches _libManager.Initialize(), since that's
         // where the per-module start decisions get applied
         await App.GetService<ModuleActivationService>().InitializeAsync();
+
+        // Let curve profiles follow whichever source is actually streaming. Mutations are
+        // built by reflection with no constructor args, so this is wired statically.
+        CurveCalibration.SourceNameResolver = () =>
+        {
+            try
+            {
+                return GetService<TrackingSourceDetector>()
+                    .Scan()
+                    .FirstOrDefault(s => s.Strong)?.Name;
+            }
+            catch (Exception)
+            {
+                return null;
+            }
+        };
 
         await App.GetService<IActivationService>().ActivateAsync(args);
         await Host.StartAsync();

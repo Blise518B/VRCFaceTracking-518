@@ -3,6 +3,7 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using VRCFaceTracking.Core.Params.Data;
 using VRCFaceTracking.Core.Params.Data.Mutation;
 using VRCFaceTracking.Core.Params.Data.Mutation.Curves;
+using VRCFaceTracking.Core.Services;
 
 namespace VRCFaceTracking.ViewModels;
 
@@ -124,6 +125,111 @@ public partial class CurvesViewModel : ObservableRecipient
     }
 
     public ResponseCurve? GetCurve(string channelKey) => Mutation?.GetOrCreateCurve(channelKey);
+
+    public ObservableCollection<string> Profiles { get; } = new();
+
+    /// <summary>
+    /// Follow the detected source, so swapping headsets swaps curve sets automatically.
+    /// </summary>
+    public bool AutoSwitchBySource
+    {
+        get => Mutation?.AutoSwitchBySource ?? true;
+        set
+        {
+            if (Mutation != null)
+            {
+                Mutation.AutoSwitchBySource = value;
+                OnPropertyChanged();
+            }
+        }
+    }
+
+    [ObservableProperty] private string _profileStatus = string.Empty;
+
+    public void RefreshProfiles()
+    {
+        var mutation = Mutation;
+        Profiles.Clear();
+        if (mutation == null)
+        {
+            return;
+        }
+
+        foreach (var name in mutation.ProfileNames)
+        {
+            Profiles.Add(name);
+        }
+
+        var effective = mutation.EffectiveProfileName;
+        var edited = mutation.Profiles.TryGetValue(effective, out var p) ? p.Curves.Count : 0;
+        ProfileStatus = mutation.AutoSwitchBySource
+            ? $"editing \"{effective}\" - picked automatically from the active source - {edited} channel(s) shaped"
+            : $"editing \"{effective}\" - {edited} channel(s) shaped";
+    }
+
+    /// <summary>Switches profile and returns true if the open editors need rebuilding.</summary>
+    public bool SelectProfile(string? name)
+    {
+        var mutation = Mutation;
+        if (mutation == null || string.IsNullOrWhiteSpace(name) || name == mutation.EffectiveProfileName)
+        {
+            return false;
+        }
+
+        mutation.SetActiveProfile(name);
+        RefreshProfiles();
+        RefreshModifiedMarkers();
+        return true;
+    }
+
+    public string AddProfileFromActiveSource()
+    {
+        var mutation = Mutation;
+        if (mutation == null)
+        {
+            return string.Empty;
+        }
+
+        // Name it after whatever is streaming, so auto-switch will pick it up later
+        var suggested = _detectorName() ?? $"Profile {mutation.Profiles.Count + 1}";
+        var name = suggested;
+        var suffix = 2;
+        while (mutation.Profiles.ContainsKey(name))
+        {
+            name = $"{suggested} {suffix++}";
+        }
+
+        mutation.DuplicateProfile(mutation.EffectiveProfileName, name);
+        mutation.SetActiveProfile(name);
+        RefreshProfiles();
+        return name;
+    }
+
+    public bool DeleteActiveProfile()
+    {
+        var mutation = Mutation;
+        if (mutation == null)
+        {
+            return false;
+        }
+
+        var removed = mutation.DeleteProfile(mutation.EffectiveProfileName);
+        RefreshProfiles();
+        RefreshModifiedMarkers();
+        return removed;
+    }
+
+    private static string? _detectorName()
+    {
+        try
+        {
+            return App.GetService<TrackingSourceDetector>().Scan().FirstOrDefault(s => s.Strong)?.Name;
+        }
+        catch (Exception)
+        {
+            return null;
+        }
+    }
 
     public void RefreshModifiedMarkers()
     {

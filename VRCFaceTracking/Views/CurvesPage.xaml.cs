@@ -80,6 +80,7 @@ public sealed partial class CurvesPage : Page
         MasterToggle.IsEnabled = mutationReady;
 
         ViewModel.RefreshModifiedMarkers();
+        SyncProfileCombo();
         RebuildCards();
         _liveTimer.Start();
     }
@@ -117,6 +118,65 @@ public sealed partial class CurvesPage : Page
         }
 
         ViewModel.CurvesEnabled = MasterToggle.IsOn;
+        ScheduleSave();
+    }
+
+    private bool _suppressProfileEvent;
+
+    /// <summary>
+    /// Repopulates the profile picker without the selection change looping back in as a
+    /// user-initiated switch.
+    /// </summary>
+    private void SyncProfileCombo()
+    {
+        _suppressProfileEvent = true;
+        try
+        {
+            ViewModel.RefreshProfiles();
+            ProfileCombo.SelectedItem = ViewModel.Mutation?.EffectiveProfileName;
+        }
+        finally
+        {
+            _suppressProfileEvent = false;
+        }
+    }
+
+    private void ProfileCombo_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (_suppressProfileEvent)
+        {
+            return;
+        }
+
+        if (ViewModel.SelectProfile(ProfileCombo.SelectedItem as string))
+        {
+            // Open editors point at the old profile's curve objects, so re-attach them
+            RebuildCards();
+            ScheduleSave();
+        }
+    }
+
+    private void NewProfile_OnClick(object sender, RoutedEventArgs e)
+    {
+        ViewModel.AddProfileFromActiveSource();
+        SyncProfileCombo();
+        RebuildCards();
+        ScheduleSave();
+    }
+
+    private void DeleteProfile_OnClick(object sender, RoutedEventArgs e)
+    {
+        if (ViewModel.DeleteActiveProfile())
+        {
+            SyncProfileCombo();
+            RebuildCards();
+            ScheduleSave();
+        }
+    }
+
+    private void AutoSwitch_Changed(object sender, RoutedEventArgs e)
+    {
+        SyncProfileCombo();
         ScheduleSave();
     }
 

@@ -24,6 +24,7 @@
                 <RowDefinition Height="Auto"/>
                 <RowDefinition Height="Auto"/>
                 <RowDefinition Height="Auto"/>
+                <RowDefinition Height="Auto"/>
                 <RowDefinition Height="*"/>
             </Grid.RowDefinitions>
 
@@ -56,19 +57,49 @@
                 </Grid>
             </Border>
 
+            <Border Grid.Row="1"
+                    Background="{StaticResource Cat518PurpleTint}"
+                    BorderBrush="{StaticResource Cat518PurpleEdge}"
+                    BorderThickness="1"
+                    CornerRadius="4"
+                    Padding="12,10,12,10"
+                    Margin="0,0,0,8">
+                <StackPanel Spacing="6">
+                    <TextBlock Text="Curve profile" FontWeight="SemiBold"
+                               Foreground="{StaticResource Cat518Purple}"/>
+                    <ComboBox x:Name="ProfileCombo"
+                              HorizontalAlignment="Stretch"
+                              ItemsSource="{x:Bind ViewModel.Profiles, Mode=OneWay}"
+                              SelectionChanged="ProfileCombo_SelectionChanged"/>
+                    <TextBlock Text="{x:Bind ViewModel.ProfileStatus, Mode=OneWay}"
+                               FontFamily="Consolas" FontSize="11"
+                               Foreground="{StaticResource Cat518Cyan}"
+                               TextWrapping="Wrap"/>
+                    <StackPanel Orientation="Horizontal" Spacing="6">
+                        <Button Content="New from source" Click="NewProfile_OnClick"/>
+                        <Button Content="Delete" Click="DeleteProfile_OnClick"/>
+                    </StackPanel>
+                    <CheckBox x:Name="AutoSwitchCheck"
+                              Content="Switch automatically with the active source"
+                              IsChecked="{x:Bind ViewModel.AutoSwitchBySource, Mode=TwoWay}"
+                              Checked="AutoSwitch_Changed"
+                              Unchecked="AutoSwitch_Changed"/>
+                </StackPanel>
+            </Border>
+
             <TextBox x:Name="SearchBox"
-                     Grid.Row="1"
+                     Grid.Row="2"
                      PlaceholderText="Search channels..."
                      TextChanged="SearchBox_TextChanged"
                      Margin="0,0,0,8"/>
 
-            <StackPanel Grid.Row="2" Orientation="Horizontal" Spacing="6" Margin="0,0,0,8">
+            <StackPanel Grid.Row="3" Orientation="Horizontal" Spacing="6" Margin="0,0,0,8">
                 <Button Content="Open both eyes" Click="OpenBothEyes_Click"/>
                 <Button Content="Close all" Click="CloseAll_Click"/>
             </StackPanel>
 
             <ListView x:Name="ChannelList"
-                      Grid.Row="3"
+                      Grid.Row="4"
                       ItemsSource="{x:Bind ViewModel.FilteredChannels, Mode=OneWay}"
                       SelectionMode="None">
                 <ListView.ItemTemplate>
