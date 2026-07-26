@@ -33,9 +33,12 @@ public class OscQueryConfigParser(
                 return null;
             }
 
-            var avatarConfig =
-                JsonConvert.DeserializeObject<OscQueryNode>(await response.Content.ReadAsStringAsync());
-            parserLogger.LogDebug(avatarConfig.ToString());
+            var raw = await response.Content.ReadAsStringAsync();
+            var avatarConfig = JsonConvert.DeserializeObject<OscQueryNode>(raw);
+            // Never log the tree itself: for a big avatar it's hundreds of KB per resolve
+            // (which drowned latest.log), and passing raw JSON as the log message treats
+            // every { in it as a format placeholder.
+            parserLogger.LogDebug("Fetched avatar OSCQuery tree ({bytes} bytes)", raw.Length);
             var avatarInfo = new OscQueryAvatarInfo(avatarConfig);
 
             // Reset all parameters

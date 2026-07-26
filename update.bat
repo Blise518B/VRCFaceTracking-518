@@ -5,6 +5,7 @@ echo Stopping VRCFaceTracking to rebuild (face tracking pauses for ~30s)...
 rem Kill the watchdog FIRST so it doesn't relaunch the old build mid-rebuild
 taskkill /IM VRCFaceTracking.Watchdog.exe /F >nul 2>&1
 taskkill /IM VRCFaceTracking.exe /F >nul 2>&1
+taskkill /IM VRCFaceTracking.Lite.exe /F >nul 2>&1
 taskkill /IM VRCFaceTracking.ModuleProcess.exe /F >nul 2>&1
 
 rem We just force-killed the app, which leaves the crash reporter's run marker behind

@@ -35,12 +35,6 @@ public class CurveCalibration : TrackingMutation
     public bool AutoSwitchBySource = true;
 
     /// <summary>
-    /// Pre-profile saved data. Kept only so existing configs migrate into the Default profile
-    /// on first load instead of silently losing the user's curves.
-    /// </summary>
-    public Dictionary<string, ResponseCurve>? Curves;
-
-    /// <summary>
     /// Supplies the name of the source currently streaming, for auto-switching. Set once at
     /// startup: mutations are constructed by reflection with no constructor args, so they
     /// can't be given the detector through DI.
@@ -70,24 +64,12 @@ public class CurveCalibration : TrackingMutation
     public override void Initialize(UnifiedTrackingData data) => EnsureValid();
 
     /// <summary>
-    /// Migrates pre-profile saved data, validates every profile's curves, drops ones for
-    /// channels that no longer exist, and rebuilds the lookup the tracking thread uses.
+    /// Validates every profile's curves, drops ones for channels that no longer exist, and
+    /// rebuilds the lookup the tracking thread uses.
     /// </summary>
     private void EnsureValid()
     {
         Profiles ??= new Dictionary<string, CurveProfile>();
-
-        // Pre-profile configs stored curves at the top level; fold them into Default so an
-        // upgrade doesn't look like all the user's tuning vanished.
-        if (Curves is { Count: > 0 })
-        {
-            var target = GetOrCreateProfile(CurveProfile.DefaultName);
-            foreach (var pair in Curves)
-            {
-                target.Curves.TryAdd(pair.Key, pair.Value);
-            }
-            Curves = null;
-        }
 
         if (Profiles.Count == 0)
         {

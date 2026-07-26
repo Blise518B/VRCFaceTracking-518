@@ -161,7 +161,7 @@ public partial class CurvesViewModel : ObservableRecipient
         }
 
         var effective = mutation.EffectiveProfileName;
-        var edited = mutation.Profiles.TryGetValue(effective, out var p) ? p.Curves.Count : 0;
+        var edited = mutation.Profiles.TryGetValue(effective, out var p) ? p?.Curves?.Count ?? 0 : 0;
         ProfileStatus = mutation.AutoSwitchBySource
             ? $"editing \"{effective}\" - picked automatically from the active source - {edited} channel(s) shaped"
             : $"editing \"{effective}\" - {edited} channel(s) shaped";
@@ -234,10 +234,18 @@ public partial class CurvesViewModel : ObservableRecipient
     public void RefreshModifiedMarkers()
     {
         var mutation = Mutation;
+
+        // Markers reflect the profile currently in effect
+        Dictionary<string, ResponseCurve>? curves = null;
+        if (mutation != null)
+        {
+            curves = mutation.GetOrCreateProfile(mutation.EffectiveProfileName).Curves;
+        }
+
         foreach (var item in AllChannels)
         {
-            if (mutation != null &&
-                mutation.Curves.TryGetValue(item.Key, out var curve) &&
+            if (curves != null &&
+                curves.TryGetValue(item.Key, out var curve) &&
                 curve != null)
             {
                 item.IsModified = curve.Enabled && !curve.IsIdentity;

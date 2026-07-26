@@ -1,4 +1,5 @@
 ﻿using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Logging;
 using VRCFaceTracking.Core.Contracts;
 using VRCFaceTracking.Core.OSC;
 using VRCFaceTracking.Core.Params.Data;
@@ -33,10 +34,14 @@ public class ParameterSenderService : BackgroundService
         }
     }
     
-    public ParameterSenderService(OscSendService sendService, UnifiedTrackingMutator mutator)
+    private readonly ILogger<ParameterSenderService>? _logger;
+    private DateTime _lastSendErrorLog = DateTime.MinValue;
+
+    public ParameterSenderService(OscSendService sendService, UnifiedTrackingMutator mutator, ILogger<ParameterSenderService>? logger = null)
     {
         _sendService = sendService;
         _mutator = mutator;
+        _logger = logger;
     }
 
     public static void Enqueue(OscMessage message) => SendQueue.Enqueue(message);
@@ -62,19 +67,28 @@ public class ParameterSenderService : BackgroundService
 
                 SendQueue.Clear();
             }
+            catch (OperationCanceledException)
+            {
+                // Normal shutdown
+                break;
+            }
             catch (Exception e)
             {
-                SentrySdk.CaptureException(e, scope =>
+                // Do NOT inspect the queued OscMessages here. The stock code enriched a Sentry
+                // report with msg.Value for every queued message - but Value marshals from the
+                // message's native allocation, which is no longer valid after a failed send.
+                // That turned every transient send error into an AccessViolation that killed
+                // the whole process (verified from .NET Runtime event-log stacks). The queue
+                // is dropped instead: stale tracking frames are worthless anyway.
+                var count = SendQueue.Count;
+                SendQueue.Clear();
+
+                if (DateTime.UtcNow - _lastSendErrorLog > TimeSpan.FromSeconds(5))
                 {
-                    var i = 0;
-                    foreach (var msg in SendQueue)
-                    {
-                        scope.SetExtra($"Address {i}", msg.Address);
-                        scope.SetExtra($"Values {i}", msg._meta.ValueLength);
-                        scope.SetExtra($"Value 0 {i}", msg.Value);
-                        i++;
-                    }
-                });
+                    _lastSendErrorLog = DateTime.UtcNow;
+                    _logger?.LogWarning("OSC send failed ({type}: {message}). Dropped {count} queued messages; will keep trying.",
+                        e.GetType().Name, e.Message, count);
+                }
             }
         }
     }

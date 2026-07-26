@@ -50,8 +50,10 @@ public static class Program
         Console.Title = "VRCFaceTracking Lite - Blise518B Edition";
         CrashReportService.EarlyStartup();
 
-        // Only one instance may own the OSC ports
+        // Only one instance may own the OSC ports (KillAllProcessesOfName skips our own PID,
+        // so killing our own name here only removes other lite instances)
         Core.Utils.KillAllProcessesOfName("VRCFaceTracking");
+        Core.Utils.KillAllProcessesOfName("VRCFaceTracking.Lite");
         Core.Utils.KillAllProcessesOfName("VRCFaceTracking.ModuleProcess");
 
         var services = BuildServices();

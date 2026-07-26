@@ -221,8 +221,11 @@ public partial class App : Application
             e.SetObserved();
         };
 
-        // Kill any other instances of VRCFaceTracking.exe and our module processes
+        // Kill any other instances of VRCFaceTracking.exe and our module processes.
+        // The lite build binds the same OSC ports, so a lingering one silently breaks
+        // all OSC traffic - it must die here too.
         Core.Utils.KillAllProcessesOfName("VRCFaceTracking");
+        Core.Utils.KillAllProcessesOfName("VRCFaceTracking.Lite");
         Core.Utils.KillAllProcessesOfName("VRCFaceTracking.ModuleProcess");
 
         await StartCrashWatchdogAsync();
