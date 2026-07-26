@@ -7,6 +7,7 @@ using VRCFaceTracking.ViewModels;
 using Windows.System;
 using Microsoft.UI.Xaml.Media.Imaging;
 using VRCFaceTracking.Core.Contracts;
+using VRCFaceTracking.Core.Contracts.Services;
 using VRCFaceTracking.Core.Params.Data;
 using VRCFaceTracking.Core.Services;
 using VrcftImage = VRCFaceTracking.Core.Types.Image;
@@ -35,6 +36,39 @@ public sealed partial class SettingsPage : Page, INotifyPropertyChanged
         }
 
         LaunchMode.Write(LaunchModeCombo.SelectedIndex == 1 ? AppLaunchMode.Lite : AppLaunchMode.Full);
+    }
+
+    /// <summary>
+    /// Live hand-off to the console monitor. Order matters: the watchdog must die first
+    /// (or it treats our exit as a crash and relaunches the full app underneath the
+    /// console), then a clean teardown so mutation/settings saves finish, then spawn
+    /// the lite exe - which waits for this process to vanish before taking the ports.
+    /// </summary>
+    private async void SwitchToLite_OnClick(object sender, RoutedEventArgs e)
+    {
+        if (!LaunchMode.CanHandOff(LaunchMode.LiteExeName))
+        {
+            SwitchToLiteButton.Content = "Lite exe not found";
+            return;
+        }
+
+        SwitchToLiteButton.IsEnabled = false;
+        SwitchToLiteButton.Content = "Switching...";
+
+        try
+        {
+            App.GetService<AutoRestartService>().StopWatchdog();
+            await App.GetService<IMainService>().Teardown();
+            App.GetService<CrashReportService>().MarkCleanExit();
+        }
+        catch (Exception)
+        {
+            // A teardown hiccup must not strand the user with no app at all -
+            // the lite exe's startup sweep cleans up whatever is left of us.
+        }
+
+        LaunchMode.TryHandOff(LaunchMode.LiteExeName, "--force-lite");
+        Environment.Exit(0);
     }
 
     public string LastCrashText =>

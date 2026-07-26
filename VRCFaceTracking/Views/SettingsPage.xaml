@@ -110,6 +110,14 @@
                         <ComboBoxItem Content="The lite monitor"/>
                     </ComboBox>
                 </labs:SettingsCard>
+
+                <labs:SettingsCard Header="Switch to the lite monitor now"
+                                   Description="Hands this session over to the console monitor immediately - tracking, curves and the router keep working. Press F in the console to switch back (518 fork feature)">
+                    <labs:SettingsCard.HeaderIcon>
+                        <FontIcon Glyph="&#xE8AB;" Foreground="{StaticResource Cat518Cyan}" />
+                    </labs:SettingsCard.HeaderIcon>
+                    <Button x:Name="SwitchToLiteButton" Content="Switch now" Click="SwitchToLite_OnClick"/>
+                </labs:SettingsCard>
                 
                 <labs:SettingsExpander Header="Crash Auto-Restart"
                                        Description="Automatically restart crashed tracking modules and relaunch VRCFaceTracking if it crashes (518 fork feature)">

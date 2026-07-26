@@ -64,22 +64,55 @@ public static class LaunchMode
     }
 
     /// <summary>
-    /// Starts the other build and returns true if it was launched. Used by whichever binary
-    /// SteamVR invoked to hand over to the one the user actually wants.
+    /// Finds the other build's exe: normally right next to ours (the packaged layout, and the
+    /// full build's output folder which also carries the lite exe), with a fallback hop across
+    /// the dev tree's sibling project output for running straight out of the repo.
     /// </summary>
-    public static bool TryHandOff(string exeName)
+    private static string? Resolve(string exeName)
     {
         try
         {
-            var path = Path.Combine(AppContext.BaseDirectory, exeName);
-            if (!File.Exists(path))
+            var local = Path.Combine(AppContext.BaseDirectory, exeName);
+            if (File.Exists(local))
+            {
+                return local;
+            }
+
+            // Dev layout: <repo>\<project>\bin\x64\Release\<tfm>\win-x64\
+            var repoRoot = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, @"..\..\..\..\..\.."));
+            var project = exeName == FullExeName ? "VRCFaceTracking" : "VRCFaceTracking.Lite";
+            var sibling = Path.Combine(repoRoot, project,
+                @"bin\x64\Release\net10.0-windows10.0.22621.0\win-x64", exeName);
+            return File.Exists(sibling) ? sibling : null;
+        }
+        catch (Exception)
+        {
+            return null;
+        }
+    }
+
+    /// <summary>True when the other build exists somewhere we can start it from.</summary>
+    public static bool CanHandOff(string exeName) => Resolve(exeName) != null;
+
+    /// <summary>
+    /// Starts the other build and returns true if it was launched. Used by whichever binary
+    /// SteamVR invoked to hand over to the one the user actually wants, and by the live
+    /// full-app/console switch.
+    /// </summary>
+    public static bool TryHandOff(string exeName, string? arguments = null)
+    {
+        try
+        {
+            var path = Resolve(exeName);
+            if (path == null)
             {
                 return false;
             }
 
             Process.Start(new ProcessStartInfo(path)
             {
-                WorkingDirectory = AppContext.BaseDirectory,
+                Arguments = arguments ?? string.Empty,
+                WorkingDirectory = Path.GetDirectoryName(path)!,
                 UseShellExecute = true,
             });
             return true;

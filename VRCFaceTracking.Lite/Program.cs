@@ -1,4 +1,5 @@
-﻿using Microsoft.Extensions.DependencyInjection;
+﻿using System.Diagnostics;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using VRCFaceTracking.Core;
 using VRCFaceTracking.Core.Contracts;
@@ -50,6 +51,21 @@ public static class Program
         Console.Title = "VRCFaceTracking Lite - Blise518B Edition";
         CrashReportService.EarlyStartup();
 
+        // When the full app hands over to us it is still finishing its clean shutdown
+        // (saving mutation data, stopping its watchdog). Give it a few seconds before
+        // the exclusivity sweep below, so a live switch never becomes a hard kill
+        // mid-save. Costs nothing when no full app is running.
+        try
+        {
+            for (var waited = 0; waited < 8000 && Process.GetProcessesByName("VRCFaceTracking").Length > 0; waited += 200)
+            {
+                Thread.Sleep(200);
+            }
+        }
+        catch (Exception)
+        {
+        }
+
         // Only one instance may own the OSC ports (KillAllProcessesOfName skips our own PID,
         // so killing our own name here only removes other lite instances)
         Core.Utils.KillAllProcessesOfName("VRCFaceTracking");
@@ -94,11 +110,15 @@ public static class Program
             var libManager = services.GetRequiredService<ILibManager>();
             var mainService = services.GetRequiredService<IMainService>();
 
-            recv.OnMessageReceived += _ => Interlocked.Increment(ref _messagesIn);
             send.OnMessagesDispatched += count => Interlocked.Add(ref _messagesOut, count);
 
             logger.LogInformation("Initializing OSC...");
             await oscQuery.InitializeAsync();
+
+            // Attach AFTER InitializeAsync: it ASSIGNS OnMessageReceived (rather than
+            // adding to it), so a counter hooked earlier gets silently wiped and the
+            // monitor reports "in 0" forever no matter how much data arrives.
+            recv.OnMessageReceived += _ => Interlocked.Increment(ref _messagesIn);
 
             logger.LogInformation("Initializing tracking...");
             await mainService.InitializeAsync();
@@ -116,11 +136,19 @@ public static class Program
                 cts.Cancel();
             };
 
-            await RenderLoop(services, cts.Token);
+            var switchToFull = await RenderLoop(services, cts);
 
             logger.LogInformation("Shutting down...");
             await mainService.Teardown();
             crash.MarkCleanExit();
+
+            if (switchToFull)
+            {
+                // Teardown finished, so the full app boots into free OSC ports.
+                logger.LogInformation("Handing off to the full app...");
+                LaunchMode.TryHandOff(LaunchMode.FullExeName);
+            }
+
             return 0;
         }
         catch (Exception ex)
@@ -173,11 +201,33 @@ public static class Program
         return services.BuildServiceProvider();
     }
 
-    private static async Task RenderLoop(ServiceProvider services, CancellationToken token)
+    /// <summary>One colored run of text; a line is a sequence of these.</summary>
+    private readonly record struct Seg(string Text, ConsoleColor Color);
+
+    // The neon palette, mapped onto the 16 console colors: green frame/headers,
+    // cyan live values, purple (magenta) secondary info, amber notes, red failures.
+    private const ConsoleColor Frame = ConsoleColor.DarkGreen;
+    private const ConsoleColor Header = ConsoleColor.Green;
+    private const ConsoleColor Value = ConsoleColor.Cyan;
+    private const ConsoleColor Secondary = ConsoleColor.Magenta;
+    private const ConsoleColor Note = ConsoleColor.DarkYellow;
+    private const ConsoleColor Alert = ConsoleColor.Red;
+    private const ConsoleColor KeyHint = ConsoleColor.Yellow;
+    private const ConsoleColor Dim = ConsoleColor.DarkGray;
+    private const ConsoleColor Body = ConsoleColor.Gray;
+
+    private static Seg[] Line(params Seg[] segs) => segs;
+    private static readonly Seg[] Blank = Array.Empty<Seg>();
+
+    /// <summary>Runs until cancelled. Returns true when the user asked to switch to the full app.</summary>
+    private static async Task<bool> RenderLoop(ServiceProvider services, CancellationTokenSource cts)
     {
+        var token = cts.Token;
         var libManager = services.GetRequiredService<ILibManager>();
         var oscQuery = services.GetRequiredService<OscQueryService>();
         var oscTarget = services.GetRequiredService<IOscTarget>();
+        var switchToFull = false;
+        var canSwitch = LaunchMode.CanHandOff(LaunchMode.FullExeName);
 
         // A redirected stdout (SteamVR's log capture, `lite.exe > file`) has no
         // console buffer, so Clear/SetCursorPosition throw "handle is invalid".
@@ -202,23 +252,28 @@ public static class Program
         {
             UpdateRates();
 
-            var lines = new List<string>
+            var modules = SafeSnapshot(libManager);
+            var anyActive = modules.Any(m => m.Active && !m.IsDormant);
+
+            var lines = new List<Seg[]>
             {
-                "VRCFaceTracking - Blise518B Edition   [ lite monitor ]",
-                new string('=', 62),
-                $"  uptime      {Describe(DateTime.Now - Started)}",
-                string.Empty,
-                "  MODULES",
+                Line(new Seg("VRCFaceTracking", Header), new Seg(" - Blise518B Edition   ", Body),
+                     new Seg("[ lite monitor ]", Secondary)),
+                Line(new Seg(new string('=', 62), Frame)),
+                Line(new Seg("  uptime      ", Dim), new Seg(Describe(DateTime.Now - Started), Value)),
+                Blank,
+                Line(new Seg("  MODULES", Header)),
             };
 
-            var modules = SafeSnapshot(libManager);
             if (modules.Count == 0)
             {
-                lines.Add("    (none loaded)");
+                lines.Add(Line(new Seg("    (none loaded)", Dim)));
             }
             foreach (var module in modules)
             {
-                var state = module.IsDormant ? "idle  " : module.Active ? "ACTIVE" : "off   ";
+                var (state, stateColor) = module.IsDormant
+                    ? ("idle  ", Note)
+                    : module.Active ? ("ACTIVE", Header) : ("off   ", Dim);
                 var uses = (module.UsingEye, module.UsingExpression) switch
                 {
                     (true, true) => "eye + face",
@@ -226,39 +281,68 @@ public static class Program
                     (false, true) => "face",
                     _ => string.Empty,
                 };
-                lines.Add($"    [{state}] {Trim(module.Name, 34),-34} {uses}");
+                lines.Add(Line(new Seg("    [", Dim), new Seg(state, stateColor), new Seg("] ", Dim),
+                               new Seg($"{Trim(module.Name, 34),-34} ", Body), new Seg(uses, Secondary)));
                 if (module.IsDormant && !string.IsNullOrWhiteSpace(module.StatusNote))
                 {
-                    lines.Add($"             {Trim(module.StatusNote, 48)}");
+                    lines.Add(Line(new Seg($"             {Trim(module.StatusNote, 48)}", Note)));
                 }
             }
 
-            lines.Add(string.Empty);
-            lines.Add("  AVATAR");
+            lines.Add(Blank);
+            lines.Add(Line(new Seg("  AVATAR", Header)));
             var avatar = SafeAvatar(oscQuery);
             lines.Add(avatar == null
-                ? "    not connected"
-                : $"    {Trim(avatar.Value.Name, 34),-34} {avatar.Value.Parameters} parameters");
+                ? Line(new Seg("    not connected", Alert))
+                : Line(new Seg($"    {Trim(avatar.Value.Name, 34),-34} ", Value),
+                       new Seg(avatar.Value.Parameters.ToString(), Value), new Seg(" parameters", Dim)));
 
-            lines.Add(string.Empty);
-            lines.Add("  OSC");
-            lines.Add($"    in  {_inPerSec,5} msg/s   port {oscTarget.InPort}");
-            lines.Add($"    out {_outPerSec,5} msg/s   port {oscTarget.OutPort}");
-            lines.Add(string.Empty);
-            lines.Add("  Settings, curves and calibration live in the full app.");
-            lines.Add("  Ctrl+C to exit.");
+            lines.Add(Blank);
+            lines.Add(Line(new Seg("  OSC", Header)));
+            // A zero rate while tracking is active is the "why is my face frozen"
+            // signal - paint it red so it can't hide in the noise.
+            var inColor = _inPerSec > 0 ? Value : anyActive ? Alert : Dim;
+            var outColor = _outPerSec > 0 ? Value : anyActive ? Alert : Dim;
+            lines.Add(Line(new Seg("    in  ", Dim), new Seg($"{_inPerSec,5}", inColor),
+                           new Seg(" msg/s   port ", Dim), new Seg(oscTarget.InPort.ToString(), Body)));
+            lines.Add(Line(new Seg("    out ", Dim), new Seg($"{_outPerSec,5}", outColor),
+                           new Seg(" msg/s   port ", Dim), new Seg(oscTarget.OutPort.ToString(), Body)));
+            lines.Add(Blank);
+            lines.Add(Line(new Seg("  Settings, curves and calibration live in the full app.", Dim)));
+            lines.Add(canSwitch && interactive
+                ? Line(new Seg("  [F]", KeyHint), new Seg(" switch to the full app    ", Dim),
+                       new Seg("[Ctrl+C]", KeyHint), new Seg(" quit", Dim))
+                : Line(new Seg("  [Ctrl+C]", KeyHint), new Seg(" quit", Dim)));
 
             if (interactive)
             {
                 Draw(lines);
+
+                // Keyboard: F hands this session back to the full app
+                try
+                {
+                    while (Console.KeyAvailable)
+                    {
+                        var key = Console.ReadKey(intercept: true);
+                        if (key.Key == ConsoleKey.F && canSwitch)
+                        {
+                            switchToFull = true;
+                            cts.Cancel();
+                        }
+                    }
+                }
+                catch (Exception)
+                {
+                    // Redirected/absent stdin; keys simply aren't available
+                }
             }
             else if (DateTime.Now - lastPlainPrint >= TimeSpan.FromSeconds(5))
             {
-                // Sequential snapshots for logs/pipes - no cursor tricks, low volume
+                // Sequential snapshots for logs/pipes - no cursor tricks, no colors
                 lastPlainPrint = DateTime.Now;
                 foreach (var line in lines)
                 {
-                    Console.WriteLine(line);
+                    Console.WriteLine(string.Concat(line.Select(s => s.Text)));
                 }
                 Console.WriteLine();
             }
@@ -277,6 +361,7 @@ public static class Program
         {
             try
             {
+                Console.ResetColor();
                 Console.CursorVisible = true;
             }
             catch (IOException)
@@ -284,6 +369,8 @@ public static class Program
                 // Console vanished mid-run; nothing to restore
             }
         }
+
+        return switchToFull;
     }
 
     private static void UpdateRates()
@@ -333,9 +420,9 @@ public static class Program
 
     /// <summary>
     /// Redraws in place rather than clearing, so the screen doesn't flicker. Lines are padded
-    /// to wipe whatever was longer before them.
+    /// to wipe whatever was longer before them; each segment carries its own color.
     /// </summary>
-    private static void Draw(List<string> lines)
+    private static void Draw(List<Seg[]> lines)
     {
         try
         {
@@ -343,7 +430,26 @@ public static class Program
             Console.SetCursorPosition(0, 0);
             foreach (var line in lines)
             {
-                Console.WriteLine(Trim(line, width).PadRight(width));
+                var remaining = width;
+                foreach (var seg in line)
+                {
+                    if (remaining <= 0)
+                    {
+                        break;
+                    }
+
+                    var text = seg.Text.Length > remaining ? seg.Text[..remaining] : seg.Text;
+                    Console.ForegroundColor = seg.Color;
+                    Console.Write(text);
+                    remaining -= text.Length;
+                }
+
+                Console.ResetColor();
+                if (remaining > 0)
+                {
+                    Console.Write(new string(' ', remaining));
+                }
+                Console.WriteLine();
             }
             // Clear any leftovers from a previously taller frame
             for (var i = 0; i < 4; i++)
