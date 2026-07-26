@@ -214,8 +214,10 @@ public partial class App : Application
             CrashReporter?.ReportException(e.ExceptionObject as Exception, "AppDomain.UnhandledException");
         TaskScheduler.UnobservedTaskException += (_, e) =>
         {
-            CrashReporter?.ReportException(e.Exception, "TaskScheduler.UnobservedTaskException");
-            e.SetObserved(); // already recorded; don't tear the process down for it
+            // Not fatal: we observe it and keep running, so it must not be recorded as this
+            // session's explanation - a later hard crash still needs to be reported.
+            CrashReporter?.ReportException(e.Exception, "TaskScheduler.UnobservedTaskException", fatal: false);
+            e.SetObserved();
         };
 
         // Kill any other instances of VRCFaceTracking.exe and our module processes

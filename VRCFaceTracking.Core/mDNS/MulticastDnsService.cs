@@ -155,7 +155,23 @@ public partial class MulticastDnsService : ObservableObject
                 {
                     foreach (var sender in Senders)
                     {
-                        await sender.Value.SendAsync(bytes, bytes.Length, MdnsEndpointIp4);
+                        try
+                        {
+                            await sender.Value.SendAsync(bytes, bytes.Length, MdnsEndpointIp4);
+                        }
+                        catch (SocketException e)
+                        {
+                            // A sender is bound to one local interface. When that interface
+                            // goes away - adapter change, VPN up/down, a streaming app's
+                            // virtual adapter - the send fails with WSAEADDRNOTAVAIL (10049).
+                            // This used to escape into the dispatcher and kill the app.
+                            _logger.LogDebug("mDNS send on {iface} failed ({code}): {message}",
+                                sender.Key, e.SocketErrorCode, e.Message);
+                        }
+                        catch (ObjectDisposedException)
+                        {
+                            // Sender was torn down while we were iterating
+                        }
                     }
 
                     continue;

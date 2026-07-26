@@ -18,16 +18,18 @@ public partial class UnifiedTrackingMutator : ObservableObject
 
     private readonly ILogger<UnifiedTrackingMutator> _logger;
     private readonly ILocalSettingsService _localSettingsService;
+    private readonly IDispatcherService _dispatcherService;
     private readonly object _mutationsLock = new();
     private UnifiedTrackingData _inputBuffer;
     public ObservableCollection<TrackingMutation> _mutations = new();
 
-    public UnifiedTrackingMutator(ILogger<UnifiedTrackingMutator> logger, ILocalSettingsService localSettingsService)
+    public UnifiedTrackingMutator(ILogger<UnifiedTrackingMutator> logger, ILocalSettingsService localSettingsService, IDispatcherService dispatcherService)
     {
         UnifiedTracking.Mutator = this;
         _logger = logger;
         _localSettingsService = localSettingsService;
-            
+        _dispatcherService = dispatcherService;
+
         Enabled = false;
         _inputBuffer = new UnifiedTrackingData();
     }
@@ -85,15 +87,32 @@ public partial class UnifiedTrackingMutator : ObservableObject
         {
             foreach (var mutation in _mutations)
             {
-                _logger.LogInformation($"Initializing {mutation.Name}");
-                mutation.Initialize(UnifiedTracking.Data);
+                if (mutation == null)
+                {
+                    continue;
+                }
+
+                try
+                {
+                    _logger.LogInformation($"Initializing {mutation.Name}");
+                    mutation.Initialize(UnifiedTracking.Data);
+                }
+                catch (Exception ex)
+                {
+                    // One bad mutation must not stop the rest from initializing
+                    _logger.LogError($"Initializing {mutation.Name} failed: {ex.Message}");
+                }
             }
         }
 
         _logger.LogDebug("Mutations initialized successfully.");
     }
     
-    private async void CreateMutation(TrackingMutation mutation) 
+    /// <summary>
+    /// Loads a mutation's saved settings and prepares it for use. Returns null if the mutation
+    /// can't be prepared at all, in which case it's left out rather than published broken.
+    /// </summary>
+    private async Task<TrackingMutation?> CreateMutationAsync(TrackingMutation mutation)
     {
         try
         {
@@ -108,41 +127,96 @@ public partial class UnifiedTrackingMutator : ObservableObject
             var task = (Task)readSettingMethod.Invoke(_localSettingsService, new object[] { mutation.Name, mutation, true });
             await task.ConfigureAwait(false);
 
-            PropertyInfo resultProperty = task.GetType().GetProperty("Result");
-            var typedMutation = resultProperty.GetValue(task);
+            var typedMutation = task.GetType().GetProperty("Result")?.GetValue(task);
 
-            mutation = (TrackingMutation)typedMutation;
-
-            mutation.Logger = _logger;
-            mutation.LocalSettingsService =  _localSettingsService;
-            mutation.CreateProperties();
-            _mutations.Add(mutation);
+            // Saved data can deserialize to null (missing or corrupt setting). Keep the fresh
+            // instance in that case instead of carrying a null forward.
+            if (typedMutation is TrackingMutation loaded)
+            {
+                mutation = loaded;
+            }
+            else
+            {
+                _logger.LogWarning($"Saved data for {mutation.Name} was unusable. Using defaults.");
+            }
         }
         catch (Exception ex)
         {
-            _logger.LogError($"Creating new mutation data. {ex.Message}");
+            _logger.LogError($"Reading saved data for {mutation.Name} failed, using defaults. {ex.Message}");
+        }
+
+        try
+        {
             mutation.Logger = _logger;
-            mutation.LocalSettingsService =  _localSettingsService;
+            mutation.LocalSettingsService = _localSettingsService;
             mutation.CreateProperties();
+            return mutation;
+        }
+        catch (Exception ex)
+        {
+            // Previously this ran in a catch block that could throw the very same exception
+            // again, which in an async void method took the whole app down.
+            _logger.LogError($"Could not prepare mutation {mutation?.Name}. Skipping it. {ex.Message}");
+            return null;
         }
     }
 
     public async void Load()
     {
-        // Try to load config and propogate data into Unified if they exist.
         _logger.LogDebug("Loading mutation data...");
-        var mutations = TrackingMutation.GetImplementingMutations(true);
-        await _localSettingsService.Load(this);
 
-        lock (_mutationsLock)
+        try
         {
+            var mutations = TrackingMutation.GetImplementingMutations(true);
+            await _localSettingsService.Load(this);
+
+            // Build every mutation to completion *before* publishing any of them.
+            //
+            // This used to call an async void CreateMutation inside the lock: each call
+            // returned at its first await, so Load() released the lock and ran Initialize()
+            // while the continuations were still doing _mutations.Add(...) on threadpool
+            // threads with no lock held. Initialize() then enumerated a collection being
+            // mutated underneath it, which threw "Collection was modified" - or saw a
+            // half-published entry and threw NullReferenceException - and killed the process.
+            var prepared = new List<TrackingMutation>();
             foreach (var mutation in mutations)
             {
-                CreateMutation(mutation);
+                var ready = await CreateMutationAsync(mutation).ConfigureAwait(false);
+                if (ready != null)
+                {
+                    prepared.Add(ready);
+                }
             }
-        }
 
-        _logger.LogDebug("Mutation data loaded.");
-        Initialize();
+            // Publish and initialize on the UI thread: _mutations is an ObservableCollection
+            // bound to the mutations page, so adding to it from a background thread is its own
+            // crash once that page has been opened.
+            _dispatcherService.Run(() =>
+            {
+                try
+                {
+                    lock (_mutationsLock)
+                    {
+                        foreach (var mutation in prepared)
+                        {
+                            _mutations.Add(mutation);
+                        }
+                    }
+
+                    _logger.LogDebug("Mutation data loaded.");
+                    Initialize();
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError($"Publishing mutations failed: {ex}");
+                }
+            });
+        }
+        catch (Exception ex)
+        {
+            // Load is async void (it's fire-and-forget from startup), so anything escaping
+            // here would be an unhandled exception on a threadpool thread.
+            _logger.LogError($"Loading mutations failed: {ex}");
+        }
     }
 }

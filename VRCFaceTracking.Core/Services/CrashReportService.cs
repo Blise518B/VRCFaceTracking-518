@@ -25,6 +25,12 @@ public class CrashReportService
     private const int LogTailLines = 150;
 
     /// <summary>
+    /// Hard cap on the embedded log tail. Real reports came out at ~147KB because VRCFT log
+    /// lines can be enormous, which makes them slow to open and awkward to share.
+    /// </summary>
+    private const int LogTailMaxChars = 24_000;
+
+    /// <summary>
     /// Root the reports hang off. Defaults to the folder holding latest.log; settable so
     /// tests (and any future portable mode) can redirect away from the user's real data.
     /// Must be set before <see cref="EarlyStartup"/>.
@@ -45,6 +51,13 @@ public class CrashReportService
         public DateTime StartedAt;
         public int ProcessId;
         public string Version = "unknown";
+
+        /// <summary>
+        /// Set when the dying process already wrote an exception report. Without this every
+        /// managed crash also produced a phantom "hard crash" report on the next start, so
+        /// each crash appeared twice and the hard-crash reports were pure noise.
+        /// </summary>
+        public string? Explained;
     }
 
     private static PreviousRun? _staleRun;
@@ -142,6 +155,9 @@ public class CrashReportService
                 case "version":
                     info.Version = parts[1].Trim();
                     break;
+                case "explained":
+                    info.Explained = parts[1].Trim();
+                    break;
             }
         }
         return info;
@@ -159,6 +175,16 @@ public class CrashReportService
             return;
         }
         _staleRun = null;
+
+        if (!string.IsNullOrEmpty(stale.Explained))
+        {
+            // The previous process died from a managed exception and already filed a report.
+            // Filing a hard-crash report too would double-count every single crash.
+            _logger?.LogInformation(
+                "Previous session ended in a crash that was already reported: {summary}", stale.Explained);
+            LastCrashSummary = $"{stale.Explained} (previous session)";
+            return;
+        }
 
         try
         {
@@ -196,8 +222,14 @@ public class CrashReportService
         }
     }
 
-    /// <summary>Writes a full report for an unhandled managed exception.</summary>
-    public void ReportException(Exception? exception, string source)
+    /// <summary>
+    /// Writes a full report for an unhandled managed exception.
+    /// </summary>
+    /// <param name="fatal">
+    /// True when this exception is taking the process down. Records the crash as explained in
+    /// the run marker so the next start doesn't report it a second time as a hard crash.
+    /// </param>
+    public void ReportException(Exception? exception, string source, bool fatal = true)
     {
         try
         {
@@ -249,6 +281,11 @@ public class CrashReportService
 
             Write("exception", summary, body.ToString());
             _reportWritten = true;
+
+            if (fatal)
+            {
+                MarkExplained(summary);
+            }
         }
         catch (Exception e)
         {
@@ -286,6 +323,23 @@ public class CrashReportService
         catch (Exception e)
         {
             _logger?.LogWarning("Could not write module crash report: {message}", e.Message);
+        }
+    }
+
+    /// <summary>
+    /// Notes in the run marker that this session's crash has already been written up, so the
+    /// next start reports it once rather than twice.
+    /// </summary>
+    private void MarkExplained(string summary)
+    {
+        try
+        {
+            var oneLine = summary.Replace('\r', ' ').Replace('\n', ' ');
+            File.AppendAllText(MarkerPath, $"explained={oneLine}\n");
+        }
+        catch (Exception)
+        {
+            // Worst case the crash gets reported twice
         }
     }
 
@@ -490,7 +544,15 @@ public class CrashReportService
             // Share-read: the live log is held open by the logging provider
             var all = SafeReadAllText(path).Split('\n');
             var tail = all.Length <= lines ? all : all[^lines..];
-            return string.Join("\n", tail).TrimEnd();
+            var text = string.Join("\n", tail).TrimEnd();
+
+            if (text.Length > LogTailMaxChars)
+            {
+                var trimmed = text.Length - LogTailMaxChars;
+                text = $"[...{trimmed} earlier characters trimmed...]\n" + text[^LogTailMaxChars..];
+            }
+
+            return text;
         }
         catch (Exception e)
         {
