@@ -56,6 +56,11 @@ public partial class SettingsViewModel : ObservableRecipient
         get;
     }
 
+    public OscRouterClient RouterClient
+    {
+        get;
+    }
+
     /// <summary>Newest-first list of crash report filenames, for the settings page.</summary>
     public List<string> CrashReportNames =>
         CrashReports.RecentReports().Select(f => $"{f.LastWriteTime:yyyy-MM-dd HH:mm}   {f.Name}").ToList();
@@ -67,13 +72,14 @@ public partial class SettingsViewModel : ObservableRecipient
         Contributors = await GithubService.GetContributors("benaclejames/VRCFaceTracking");
     }
 
-    public SettingsViewModel(IThemeSelectorService themeSelectorService, GithubService githubService, OpenVRService openVRService, AutoRestartService autoRestartService, CrashReportService crashReportService)
+    public SettingsViewModel(IThemeSelectorService themeSelectorService, GithubService githubService, OpenVRService openVRService, AutoRestartService autoRestartService, CrashReportService crashReportService, OscRouterClient oscRouterClient)
     {
         _themeSelectorService = themeSelectorService;
         GithubService = githubService;
         OpenVRService = openVRService;
         AutoRestart = autoRestartService;
         CrashReports = crashReportService;
+        RouterClient = oscRouterClient;
 
         _elementTheme = _themeSelectorService.Theme;
 

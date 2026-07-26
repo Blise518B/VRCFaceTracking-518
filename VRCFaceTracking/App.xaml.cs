@@ -147,6 +147,7 @@ public partial class App : Application
             services.AddSingleton<CrashReportService>();
             services.AddSingleton<TrackingSourceDetector>();
             services.AddSingleton<ModuleActivationService>();
+            services.AddSingleton<OscRouterClient>();
             services.AddTransient<GithubService>();
 
             // Views and ViewModels
@@ -236,6 +237,10 @@ public partial class App : Application
         // Must load before ActivationService reaches _libManager.Initialize(), since that's
         // where the per-module start decisions get applied
         await App.GetService<ModuleActivationService>().InitializeAsync();
+
+        // 518 OSC Fallback Standard client: receives VRChat's stream via OSC Router 518
+        // when VRChat's own discovery can no longer see us (dead after long sessions)
+        await App.GetService<OscRouterClient>().InitializeAsync();
 
         // Let curve profiles follow whichever source is actually streaming. Mutations are
         // built by reflection with no constructor args, so this is wired statically.

@@ -90,6 +90,14 @@
                     <ToggleSwitch IsOn="{x:Bind ViewModel.AutoStart, Mode=TwoWay}"/>
                 </labs:SettingsCard>
 
+                <labs:SettingsCard Header="Use OSC Router 518"
+                                   Description="Also receive VRChat data through the local OSC router - keeps tracking feedback working when VRChat's discovery dies after long sessions. Harmless when the router isn't running (518 fork feature)">
+                    <labs:SettingsCard.HeaderIcon>
+                        <FontIcon Glyph="&#xE968;" Foreground="{StaticResource Cat518Green}" />
+                    </labs:SettingsCard.HeaderIcon>
+                    <ToggleSwitch IsOn="{x:Bind ViewModel.RouterClient.Enabled, Mode=TwoWay}"/>
+                </labs:SettingsCard>
+
                 <labs:SettingsCard Header="SteamVR auto-launch starts"
                                    Description="The lite monitor is one small screen and uses far less memory. Both share the same settings, so curves tuned here apply either way (518 fork feature)">
                     <labs:SettingsCard.HeaderIcon>

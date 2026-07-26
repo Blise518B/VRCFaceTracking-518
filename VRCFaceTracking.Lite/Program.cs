@@ -73,6 +73,7 @@ public static class Program
         try
         {
             await services.GetRequiredService<ModuleActivationService>().InitializeAsync();
+            await services.GetRequiredService<OscRouterClient>().InitializeAsync();
 
             CurveCalibration.SourceNameResolver = () =>
             {
@@ -163,6 +164,7 @@ public static class Program
         services.AddSingleton<AutoRestartService>();
         services.AddSingleton<TrackingSourceDetector>();
         services.AddSingleton<ModuleActivationService>();
+        services.AddSingleton<OscRouterClient>();
         services.AddSingleton<ILibManager, UnifiedLibManager>();
         services.AddSingleton<IMainService, MainStandalone>();
         services.AddTransient<AvatarConfigParser>();
