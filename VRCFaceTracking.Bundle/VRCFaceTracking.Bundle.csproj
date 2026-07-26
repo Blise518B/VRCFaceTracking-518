@@ -1,0 +1,20 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <RuntimeIdentifier>win-x64</RuntimeIdentifier>
+    <SelfContained>true</SelfContained>
+    <PublishSingleFile>true</PublishSingleFile>
+    <EnableCompressionInSingleFile>true</EnableCompressionInSingleFile>
+    <AssemblyName>VRCFaceTracking-Blise518B-Edition</AssemblyName>
+    <RootNamespace>VRCFaceTracking.Bundle</RootNamespace>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+  </PropertyGroup>
+  <ItemGroup>
+    <!-- The payload zip is produced by package.ps1 right before this project is published -->
+    <EmbeddedResource Include="..\dist\VRCFaceTracking-Blise518B-Edition.zip"
+                      Condition="Exists('..\dist\VRCFaceTracking-Blise518B-Edition.zip')"
+                      LogicalName="AppPayload.zip" />
+  </ItemGroup>
+</Project>

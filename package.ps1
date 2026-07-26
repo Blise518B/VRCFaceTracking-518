@@ -43,6 +43,19 @@ Your existing VRCFaceTracking settings and modules are picked up automatically
 Write-Host "Zipping (takes a moment)..."
 Add-Type -AssemblyName System.IO.Compression.FileSystem
 [System.IO.Compression.ZipFile]::CreateFromDirectory($dst, $zip, [System.IO.Compression.CompressionLevel]::Optimal, $true)
+Write-Host ("Zip: {0} ({1:N1} MB)" -f $zip, ((Get-Item $zip).Length / 1MB))
 
-Write-Host ("Done: {0} ({1:N1} MB)" -f $zip, ((Get-Item $zip).Length / 1MB)) -ForegroundColor Green
-explorer /select,$zip
+Write-Host "Building single-file exe (app embedded inside)..."
+$bundleOut = Join-Path $root "dist\bundle-out"
+dotnet publish (Join-Path $root "VRCFaceTracking.Bundle\VRCFaceTracking.Bundle.csproj") -c Release -r win-x64 -o $bundleOut -v q --nologo
+if ($LASTEXITCODE -ne 0) {
+    Write-Host "Bundle build failed - the zip above is still usable." -ForegroundColor Red
+    explorer /select,$zip
+    exit 1
+}
+$exe = Join-Path $root "dist\VRCFaceTracking-Blise518B-Edition.exe"
+Copy-Item (Join-Path $bundleOut "VRCFaceTracking-Blise518B-Edition.exe") $exe -Force
+
+Write-Host ("Done: {0} ({1:N1} MB)" -f $exe, ((Get-Item $exe).Length / 1MB)) -ForegroundColor Green
+Write-Host "Send your friends the .exe - they double-click it and it unpacks + starts itself."
+explorer /select,$exe
