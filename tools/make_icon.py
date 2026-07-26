@@ -47,7 +47,7 @@ from pathlib import Path
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 from PySide6.QtCore import QBuffer, QByteArray, QPointF, QRectF, Qt
-from PySide6.QtGui import QColor, QImage, QPainter, QPen
+from PySide6.QtGui import QColor, QImage, QPainter, QPainterPath, QPen
 from PySide6.QtWidgets import QApplication
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -87,8 +87,14 @@ def _family(r: int, g: int, b: int) -> str:
     return "grey"
 
 
-def convert_glyph(source: QImage) -> QImage:
-    """Map the coloured artwork onto a black/white/transparent glyph."""
+def convert_glyph(source: QImage, invert_left: bool) -> QImage:
+    """Map the coloured artwork onto a black/white/transparent glyph.
+
+    With invert_left the machine half is rendered for placement on a black
+    background: its features come out white and the lens gloss dots black, so
+    the two halves of the icon read as photo negatives of each other - which is
+    how the original's grey|pink split translates into pure black and white.
+    """
     width, height = source.width(), source.height()
     split_x = width / 2.0  # the grey|pink boundary sits on the centre line
 
@@ -107,11 +113,11 @@ def convert_glyph(source: QImage) -> QImage:
             counts[fam] += 1
 
             if x < split_x:
-                # machine side
+                # machine side: lens + LED bars, gloss dots on top of them
                 if fam == "green":
-                    out.setPixelColor(x, y, BLACK)
+                    out.setPixelColor(x, y, WHITE if invert_left else BLACK)
                 elif fam == "white":
-                    out.setPixelColor(x, y, WHITE)  # lens gloss highlights
+                    out.setPixelColor(x, y, BLACK if invert_left else WHITE)
             else:
                 # avatar side
                 if fam == "white":
@@ -130,8 +136,14 @@ def convert_glyph(source: QImage) -> QImage:
     return out
 
 
-def crop_to_content(img: QImage) -> QImage:
-    """Trim fully transparent margins so the glyph centres properly."""
+def crop_about_split(img: QImage) -> QImage:
+    """Trim transparent margins, keeping the artwork's split line centred.
+
+    The crop is padded so the source's vertical split stays exactly in the
+    middle of the result. That way, centring the glyph in the icon also lines
+    the seam up with the icon's centre - which the split style depends on, and
+    which a plain content-bbox crop would throw off by a few pixels.
+    """
     min_x, min_y = img.width(), img.height()
     max_x = max_y = -1
 
@@ -150,14 +162,19 @@ def crop_to_content(img: QImage) -> QImage:
     if max_x < 0:
         raise SystemExit("converted glyph is empty")
 
-    return img.copy(min_x, min_y, max_x - min_x + 1, max_y - min_y + 1)
+    split = img.width() // 2
+    reach = max(split - min_x, max_x - split + 1)
+    left = max(split - reach, 0)
+    right = min(split + reach, img.width())
+
+    return img.copy(left, min_y, right - left, max_y - min_y + 1)
 
 
 # ---------------------------------------------------------------- rendering
 
 
 def draw(size: int, glyph: QImage, scale: float = DEFAULT_GLYPH_SCALE,
-         divider: bool = False) -> QImage:
+         split: bool = True) -> QImage:
     img = QImage(size, size, QImage.Format_ARGB32)
     img.fill(Qt.transparent)
     p = QPainter(img)
@@ -171,7 +188,23 @@ def draw(size: int, glyph: QImage, scale: float = DEFAULT_GLYPH_SCALE,
     p.setPen(QPen(BLACK, RING_WIDTH * s))
     p.drawEllipse(QRectF(x, y, w, h))
 
-    # Glyph, scaled to fit inside the ring and centred
+    inset = RING_RECT[0] + RING_WIDTH / 2.0
+    span = RING_RECT[2] - RING_WIDTH
+    inner = QPainterPath()
+    inner.addEllipse(QRectF(inset * s, inset * s, span * s, span * s))
+
+    if split:
+        # Machine half inverted: fill the left half of the disc's interior
+        # black, so the seam down the middle carries the original's split.
+        p.save()
+        p.setClipPath(inner)
+        p.setPen(Qt.NoPen)
+        p.setBrush(BLACK)
+        p.drawRect(QRectF(0, 0, size / 2.0, size))
+        p.restore()
+
+    # Glyph, scaled to fit inside the ring and centred. crop_about_split keeps
+    # the artwork's seam at the glyph's centre, so it lands on size/2 here.
     box = size * scale
     scaled = glyph.scaled(
         int(round(box)), int(round(box)),
@@ -182,17 +215,22 @@ def draw(size: int, glyph: QImage, scale: float = DEFAULT_GLYPH_SCALE,
         scaled,
     )
 
-    if divider:
-        p.setPen(QPen(BLACK, 5 * s, Qt.SolidLine, Qt.RoundCap))
-        half = box / 2.0
-        p.drawLine(QPointF(size / 2.0, size / 2.0 - half),
-                   QPointF(size / 2.0, size / 2.0 + half))
+    if split:
+        # The third LED bar runs flush into the split in the source art
+        # (x 257-299 of 600), so once inverted its white would bleed straight
+        # into the white avatar half. A hairline seam keeps the two halves
+        # separate and, unlike a fixed pixel gutter, stays visible at 16px.
+        p.save()
+        p.setClipPath(inner)
+        p.setPen(QPen(BLACK, max(1.0, 3.0 * s)))
+        p.drawLine(QPointF(size / 2.0, 0), QPointF(size / 2.0, size))
+        p.restore()
 
     p.end()
     return img
 
 
-def contact_sheet(glyph: QImage, scale: float, divider: bool) -> QImage:
+def contact_sheet(glyph: QImage, scale: float, split: bool) -> QImage:
     """Preview strip: big version plus the sizes Windows actually shows."""
     sizes = [256, 96, 48, 32, 16]
     pad = 12
@@ -202,7 +240,7 @@ def contact_sheet(glyph: QImage, scale: float, divider: bool) -> QImage:
     p = QPainter(sheet)
     cursor = pad
     for size in sizes:
-        p.drawImage(cursor, pad + (256 - size) // 2, draw(size, glyph, scale, divider))
+        p.drawImage(cursor, pad + (256 - size) // 2, draw(size, glyph, scale, split))
         cursor += size + pad
     p.end()
     return sheet
@@ -266,15 +304,15 @@ SCALES = {"scale-100": 1.0, "scale-125": 1.25, "scale-150": 1.5,
 TARGET_SIZES = [16, 24, 32, 48, 256]
 
 
-def write_assets(glyph: QImage, scale: float, divider: bool) -> list[Path]:
+def write_assets(glyph: QImage, scale: float, split: bool) -> list[Path]:
     written: list[Path] = []
 
     ico = ASSETS / "WindowIcon.ico"
-    write_ico(ico, [(s, draw(s, glyph, scale, divider)) for s in ICO_SIZES])
+    write_ico(ico, [(s, draw(s, glyph, scale, split)) for s in ICO_SIZES])
     written.append(ico)
 
     big = ASSETS / "AppIcon.png"
-    draw(512, glyph, scale, divider).save(str(big), "PNG")
+    draw(512, glyph, scale, split).save(str(big), "PNG")
     written.append(big)
 
     for base_name, base_px in SQUARE_SETS.items():
@@ -282,7 +320,7 @@ def write_assets(glyph: QImage, scale: float, divider: bool) -> list[Path]:
             path = ASSETS / f"{base_name}.{suffix}.png"
             if path.exists():
                 px = int(round(base_px * factor))
-                draw(px, glyph, scale, divider).save(str(path), "PNG")
+                draw(px, glyph, scale, split).save(str(path), "PNG")
                 written.append(path)
 
     for px in TARGET_SIZES:
@@ -294,7 +332,7 @@ def write_assets(glyph: QImage, scale: float, divider: bool) -> list[Path]:
         ):
             path = ASSETS / name
             if path.exists():
-                draw(px, glyph, scale, divider).save(str(path), "PNG")
+                draw(px, glyph, scale, split).save(str(path), "PNG")
                 written.append(path)
 
     return written
@@ -304,8 +342,8 @@ def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--scale", type=float, default=DEFAULT_GLYPH_SCALE,
                         help="glyph size as a fraction of the icon (default 0.62)")
-    parser.add_argument("--divider", action="store_true",
-                        help="draw the centre split line between the two halves")
+    parser.add_argument("--no-split", action="store_true",
+                        help="don't invert the machine half; put both halves on white")
     parser.add_argument("--preview", metavar="DIR",
                         help="only write preview PNGs here")
     args = parser.parse_args()
@@ -319,22 +357,23 @@ def main() -> None:
     if source.isNull():
         raise SystemExit(f"could not read {SOURCE}")
 
-    glyph = crop_to_content(convert_glyph(source))
-    print(f"converted glyph: {glyph.width()}x{glyph.height()} from {SOURCE.name}")
-
     if args.preview:
         out = Path(args.preview)
         out.mkdir(parents=True, exist_ok=True)
-        glyph.save(str(out / "glyph-raw.png"), "PNG")
-        for divider in (False, True):
-            tag = "divider" if divider else "plain"
-            contact_sheet(glyph, args.scale, divider).save(str(out / f"preview-{tag}.png"), "PNG")
-            draw(512, glyph, args.scale, divider).save(str(out / f"icon-{tag}-512.png"), "PNG")
+        for split in (True, False):
+            tag = "split" if split else "plain"
+            glyph = crop_about_split(convert_glyph(source, invert_left=split))
+            contact_sheet(glyph, args.scale, split).save(str(out / f"preview-{tag}.png"), "PNG")
+            draw(512, glyph, args.scale, split).save(str(out / f"icon-{tag}-512.png"), "PNG")
         print(f"previews written to {out}")
         return
 
-    written = write_assets(glyph, args.scale, args.divider)
-    print(f"wrote {len(written)} files (scale={args.scale}, divider={args.divider})")
+    split = not args.no_split
+    glyph = crop_about_split(convert_glyph(source, invert_left=split))
+    print(f"converted glyph: {glyph.width()}x{glyph.height()} from {SOURCE.name}")
+
+    written = write_assets(glyph, args.scale, split)
+    print(f"wrote {len(written)} files (scale={args.scale}, split={split})")
     print(f"  {written[0]}")
     print(f"  {written[1]}")
 
