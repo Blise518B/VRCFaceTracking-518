@@ -1,0 +1,189 @@
+<Page
+    x:Class="VRCFaceTracking.Views.SourcesPage"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:vm="using:VRCFaceTracking.ViewModels"
+    xmlns:services="using:VRCFaceTracking.Core.Services"
+    xmlns:helpers="using:VRCFaceTracking.Helpers">
+
+    <Page.Resources>
+        <helpers:BooleanToVisibilityConverter x:Key="BoolToVisibility"/>
+    </Page.Resources>
+
+    <ScrollViewer VerticalScrollBarVisibility="Auto">
+        <StackPanel Spacing="12" Margin="0,0,0,20">
+
+            <!-- Master switch : green section -->
+            <Border Style="{StaticResource Cat518SectionBorderStyle}"
+                    Background="{StaticResource Cat518GreenTint}"
+                    BorderBrush="{StaticResource Cat518GreenEdge}">
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="1*"/>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+                    <StackPanel VerticalAlignment="Center">
+                        <TextBlock Text="Only start modules whose source is live"
+                                   FontWeight="SemiBold"
+                                   Foreground="{StaticResource Cat518Green}"/>
+                        <TextBlock Text="{x:Bind ViewModel.Summary, Mode=OneWay}"
+                                   Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                   FontSize="12"
+                                   TextWrapping="Wrap"
+                                   Margin="0,2,0,0"/>
+                        <TextBlock Text="Off = start every installed module and let each one fail on its own (stock behaviour)."
+                                   Foreground="{ThemeResource TextFillColorTertiaryBrush}"
+                                   FontSize="11"
+                                   TextWrapping="Wrap"/>
+                    </StackPanel>
+                    <Button Grid.Column="1"
+                            Content="Re-scan"
+                            Click="Rescan_OnClick"
+                            Margin="0,0,10,0"
+                            VerticalAlignment="Center"/>
+                    <ToggleSwitch Grid.Column="2"
+                                  IsOn="{x:Bind ViewModel.GatingEnabled, Mode=TwoWay}"
+                                  MinWidth="0"
+                                  VerticalAlignment="Center"/>
+                </Grid>
+            </Border>
+
+            <!-- Detected sources : cyan section -->
+            <Border Style="{StaticResource Cat518SectionBorderStyle}"
+                    Background="{StaticResource Cat518CyanTint}"
+                    BorderBrush="{StaticResource Cat518CyanEdge}">
+                <StackPanel>
+                    <TextBlock Text="Tracking sources on this PC"
+                               FontWeight="SemiBold"
+                               Foreground="{StaticResource Cat518Cyan}"
+                               Margin="0,0,0,8"/>
+                    <ItemsControl ItemsSource="{x:Bind ViewModel.Sources, Mode=OneWay}">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate x:DataType="services:TrackingSourceStatus">
+                                <Grid Padding="0,4,0,4">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="80"/>
+                                        <ColumnDefinition Width="2*" MinWidth="150"/>
+                                        <ColumnDefinition Width="3*"/>
+                                    </Grid.ColumnDefinitions>
+
+                                    <Border CornerRadius="9" Padding="7,1,7,1"
+                                            HorizontalAlignment="Left"
+                                            VerticalAlignment="Center"
+                                            Background="{StaticResource Cat518GreenTint}"
+                                            BorderBrush="{StaticResource Cat518Green}"
+                                            BorderThickness="1"
+                                            Visibility="{x:Bind Strong, Converter={StaticResource BoolToVisibility}}">
+                                        <TextBlock Text="ACTIVE" FontSize="10" FontWeight="Bold"
+                                                   Foreground="{StaticResource Cat518Green}"/>
+                                    </Border>
+                                    <Border CornerRadius="9" Padding="7,1,7,1"
+                                            HorizontalAlignment="Left"
+                                            VerticalAlignment="Center"
+                                            Background="{StaticResource Cat518YellowTint}"
+                                            BorderBrush="{StaticResource Cat518Yellow}"
+                                            BorderThickness="1"
+                                            Visibility="{x:Bind WeakOnly, Converter={StaticResource BoolToVisibility}}">
+                                        <TextBlock Text="WEAK" FontSize="10" FontWeight="Bold"
+                                                   Foreground="{StaticResource Cat518Yellow}"/>
+                                    </Border>
+                                    <TextBlock Text="idle" FontSize="10"
+                                               VerticalAlignment="Center"
+                                               Foreground="{ThemeResource TextFillColorTertiaryBrush}"
+                                               Visibility="{x:Bind Detected, Converter={StaticResource BoolToVisibility}, ConverterParameter=Inverse}"/>
+
+                                    <TextBlock Grid.Column="1"
+                                               Text="{x:Bind Name}"
+                                               TextWrapping="Wrap"
+                                               VerticalAlignment="Center"
+                                               Margin="0,0,10,0"/>
+                                    <StackPanel Grid.Column="2" VerticalAlignment="Center">
+                                        <TextBlock Text="{x:Bind Evidence}"
+                                                   FontFamily="Consolas" FontSize="11"
+                                                   Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                                   TextWrapping="Wrap"/>
+                                        <TextBlock Text="{x:Bind Notes}"
+                                                   FontSize="11"
+                                                   Foreground="{ThemeResource TextFillColorTertiaryBrush}"
+                                                   TextWrapping="Wrap"/>
+                                    </StackPanel>
+                                </Grid>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </StackPanel>
+            </Border>
+
+            <!-- Installed modules : purple section -->
+            <Border Style="{StaticResource Cat518SectionBorderStyle}"
+                    Background="{StaticResource Cat518PurpleTint}"
+                    BorderBrush="{StaticResource Cat518PurpleEdge}">
+                <StackPanel>
+                    <TextBlock Text="Installed modules"
+                               FontWeight="SemiBold"
+                               Foreground="{StaticResource Cat518Purple}"/>
+                    <TextBlock Text="Auto follows detection. Always ignores detection and starts anyway. Never keeps it off. Changes apply on the next re-initialise."
+                               Foreground="{ThemeResource TextFillColorTertiaryBrush}"
+                               FontSize="11"
+                               TextWrapping="Wrap"
+                               Margin="0,0,0,8"/>
+                    <ItemsControl ItemsSource="{x:Bind ViewModel.Modules, Mode=OneWay}">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate x:DataType="vm:ModuleRow">
+                                <Grid Padding="0,5,0,5">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="80"/>
+                                        <ColumnDefinition Width="2*" MinWidth="150"/>
+                                        <ColumnDefinition Width="3*"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                    </Grid.ColumnDefinitions>
+
+                                    <TextBlock Text="{x:Bind StatusText, Mode=OneWay}"
+                                               FontSize="10" FontWeight="Bold"
+                                               VerticalAlignment="Center"
+                                               Foreground="{StaticResource Cat518Green}"
+                                               Visibility="{x:Bind WillStart, Mode=OneWay, Converter={StaticResource BoolToVisibility}}"/>
+                                    <TextBlock Text="{x:Bind StatusText, Mode=OneWay}"
+                                               FontSize="10" FontWeight="Bold"
+                                               VerticalAlignment="Center"
+                                               Foreground="{StaticResource Cat518Red}"
+                                               Visibility="{x:Bind WillStart, Mode=OneWay, Converter={StaticResource BoolToVisibility}, ConverterParameter=Inverse}"/>
+
+                                    <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="0,0,10,0">
+                                        <TextBlock Text="{x:Bind DisplayName}" TextWrapping="Wrap"/>
+                                        <TextBlock Text="{x:Bind MappedSources}"
+                                                   FontSize="10"
+                                                   Foreground="{ThemeResource TextFillColorTertiaryBrush}"
+                                                   TextWrapping="Wrap"/>
+                                    </StackPanel>
+
+                                    <TextBlock Grid.Column="2"
+                                               Text="{x:Bind Reason, Mode=OneWay}"
+                                               FontFamily="Consolas" FontSize="11"
+                                               Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                               TextWrapping="Wrap"
+                                               VerticalAlignment="Center"/>
+
+                                    <ComboBox Grid.Column="3"
+                                              MinWidth="96"
+                                              VerticalAlignment="Center"
+                                              SelectedIndex="{x:Bind ModeIndex, Mode=TwoWay}">
+                                        <ComboBoxItem Content="Auto"/>
+                                        <ComboBoxItem Content="Always"/>
+                                        <ComboBoxItem Content="Never"/>
+                                    </ComboBox>
+                                </Grid>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+
+                    <TextBlock Text="Nothing installed yet."
+                               Foreground="{ThemeResource TextFillColorTertiaryBrush}"
+                               FontSize="12"
+                               Visibility="{x:Bind NoModulesVisibility, Mode=OneWay}"/>
+                </StackPanel>
+            </Border>
+        </StackPanel>
+    </ScrollViewer>
+</Page>

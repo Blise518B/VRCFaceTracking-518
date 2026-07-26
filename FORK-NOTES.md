@@ -156,6 +156,39 @@ leave the other one alone.
 
 ---
 
+## 6. Source auto-detection
+
+`VRCFaceTracking.Core/Services/TrackingSourceDetector.cs` + `ModuleActivationService.cs`,
+UI on the **Sources** page
+
+Stock VRCFT launches a process for *every* installed module and lets each one fail its own
+initialisation. This works out which tracking sources are actually live and starts only the
+matching modules — so if you're on Virtual Desktop, the ETVR module doesn't start at all.
+
+Detection uses read-only OS queries: running process names, memory-mapped files and named
+pipes. Nothing is opened exclusively, so probing can never take a device from the module that
+needs it. Known sources: Virtual Desktop, ALVR, Steam Link/SteamVR, Meta/Oculus Link,
+SRanipal (Vive), EyeTrackVR, Project Babble, Varjo, Pimax, Tobii, and a "simulated" entry that
+never auto-detects.
+
+Each module can be set to **Auto** (follow detection), **Always** or **Never**, and every
+decision comes with a readable reason shown in the UI and written to the log — a silent skip
+would be indistinguishable from a bug. Two deliberate design rules:
+
+- **Unrecognised modules still start.** A module we have no mapping for might be brand-new
+  hardware; refusing to start it would look like the app is broken.
+- **Shared VR runtimes lose to specific sources.** `vrserver` and `OVRServer_x64` run for *any*
+  headset, so they're marked as weak evidence. If something specific is streaming (Virtual
+  Desktop's streamer plus its shared memory, say) then modules backed only by a generic runtime
+  are skipped. With nothing specific anywhere, a generic runtime is accepted rather than leaving
+  you with no tracking at all.
+
+> No UDP port probing, deliberately. Measuring a live setup showed port 8889 held by
+> VRCFaceTracking's **own** ETVR module process — a port probe reports our own listener, so it
+> would keep a module "detected" forever once it had started once.
+
+---
+
 ## 5. Neon518 look
 
 `VRCFaceTracking/Styles/NeonTheme.xaml` (merged last in `App.xaml`)

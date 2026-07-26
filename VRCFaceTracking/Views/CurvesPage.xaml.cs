@@ -290,9 +290,18 @@ public sealed partial class CurvesPage : Page
         header.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
         header.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
 
+        var titleKey = item.Category switch
+        {
+            CurveChannels.CategoryEye => "Cat518Green",
+            CurveChannels.CategoryGaze => "Cat518Cyan",
+            CurveChannels.CategoryHead => "Cat518Blue",
+            _ => "Cat518Purple",
+        };
+
         var title = new TextBlock
         {
             Text = item.Name,
+            Foreground = ThemeBrush(titleKey, 230, 239, 232),
             FontWeight = Microsoft.UI.Text.FontWeights.SemiBold,
             TextTrimming = TextTrimming.CharacterEllipsis,
             VerticalAlignment = VerticalAlignment.Center
@@ -313,10 +322,19 @@ public sealed partial class CurvesPage : Page
 
         _openCards.Add(card);
 
+        // Colour the card by channel category, the same way the relay colour-codes its groups
+        var (tintKey, edgeKey) = item.Category switch
+        {
+            CurveChannels.CategoryEye => ("Cat518GreenTint", "Cat518GreenEdge"),
+            CurveChannels.CategoryGaze => ("Cat518CyanTint", "Cat518CyanEdge"),
+            CurveChannels.CategoryHead => ("Cat518BlueTint", "Cat518BlueEdge"),
+            _ => ("Cat518PurpleTint", "Cat518PurpleEdge"),
+        };
+
         return new Border
         {
-            Background = ThemeBrush("CardBackgroundFillColorDefaultBrush", 128, 128, 128, 12),
-            BorderBrush = ThemeBrush("CardStrokeColorDefaultBrush", 128, 128, 128, 40),
+            Background = ThemeBrush(tintKey, 128, 128, 128, 12),
+            BorderBrush = ThemeBrush(edgeKey, 128, 128, 128, 40),
             BorderThickness = new Thickness(1),
             CornerRadius = new CornerRadius(6),
             Padding = new Thickness(12),

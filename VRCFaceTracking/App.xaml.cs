@@ -144,6 +144,8 @@ public partial class App : Application
             services.AddSingleton<UnifiedTrackingMutator>();
             services.AddSingleton<AutoRestartService>();
             services.AddSingleton<CrashReportService>();
+            services.AddSingleton<TrackingSourceDetector>();
+            services.AddSingleton<ModuleActivationService>();
             services.AddTransient<GithubService>();
 
             // Views and ViewModels
@@ -157,6 +159,8 @@ public partial class App : Application
             // Singleton so open curve editors survive navigating away and back
             services.AddSingleton<CurvesViewModel>();
             services.AddTransient<CurvesPage>();
+            services.AddTransient<SourcesViewModel>();
+            services.AddTransient<SourcesPage>();
             services.AddTransient<OutputViewModel>();
             services.AddTransient<OutputPage>();
             services.AddTransient<SettingsViewModel>();
@@ -222,6 +226,10 @@ public partial class App : Application
 
         // Now that logging is live, explain any previous session that died silently
         CrashReporter?.ReportPreviousRunIfCrashed();
+
+        // Must load before ActivationService reaches _libManager.Initialize(), since that's
+        // where the per-module start decisions get applied
+        await App.GetService<ModuleActivationService>().InitializeAsync();
 
         await App.GetService<IActivationService>().ActivateAsync(args);
         await Host.StartAsync();

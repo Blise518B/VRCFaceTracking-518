@@ -56,10 +56,12 @@ public class UnifiedLibManager : ILibManager
 
     private readonly AutoRestartService _autoRestartService;
     private readonly CrashReportService _crashReportService;
+    private readonly ModuleActivationService _moduleActivationService;
 
-    public UnifiedLibManager(ILoggerFactory factory, IDispatcherService dispatcherService, IModuleDataService moduleDataService, AutoRestartService autoRestartService, CrashReportService crashReportService)
+    public UnifiedLibManager(ILoggerFactory factory, IDispatcherService dispatcherService, IModuleDataService moduleDataService, AutoRestartService autoRestartService, CrashReportService crashReportService, ModuleActivationService moduleActivationService)
     {
         _crashReportService = crashReportService;
+        _moduleActivationService = moduleActivationService;
         _loggerFactory = factory;
         _logger = factory.CreateLogger<UnifiedLibManager>();
         _moduleLogger = factory.CreateLogger("\0VRCFT\0");
@@ -470,9 +472,18 @@ public class UnifiedLibManager : ILibManager
             // Kill lingering threads
             TeardownAllAndResetAsync();
 
-            // Find all modules
-            var modules = _moduleDataService.GetInstalledModules().Concat(_moduleDataService.GetLegacyModules());
-            var modulePaths = modules.Select(m => m.AssemblyLoadPath);
+            // Find all modules, then start only the ones whose tracking source is actually
+            // live. Without this every installed module spawns a process and races to claim
+            // the eye/expression slots, which wastes startup time and invites conflicts.
+            var modules = _moduleDataService.GetInstalledModules().Concat(_moduleDataService.GetLegacyModules()).ToList();
+            var modulePaths = _moduleActivationService.FilterStartablePaths(modules);
+
+            if (modulePaths.Count < modules.Count)
+            {
+                _logger.LogInformation(
+                    "Source detection: starting {started} of {total} installed modules. See the Sources page for why.",
+                    modulePaths.Count, modules.Count);
+            }
 
             // Load all modules
             AvailableSandboxModules.Clear();

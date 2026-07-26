@@ -398,4 +398,7 @@
   <data name="Shell_Curves.Content" xml:space="preserve">
     <value>Curve Editor</value>
   </data>
+  <data name="Shell_Sources.Content" xml:space="preserve">
+    <value>Sources</value>
+  </data>
 </root>

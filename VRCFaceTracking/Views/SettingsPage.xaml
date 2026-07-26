@@ -34,7 +34,7 @@
                 
                 <labs:SettingsCard x:Uid="ThemeSettings">
                     <labs:SettingsCard.HeaderIcon>
-                        <FontIcon Glyph="&#xE790;" />
+                        <FontIcon Glyph="&#xE790;" Foreground="{StaticResource Cat518Cyan}" />
                     </labs:SettingsCard.HeaderIcon>
                     <ComboBox x:Name="themeMode" SelectionChanged="themeMode_SelectionChanged">
                         <ComboBoxItem Content="Light" Tag="Light" />
@@ -45,7 +45,7 @@
 
                 <labs:SettingsCard x:Uid="OscSettings">
                     <labs:SettingsCard.HeaderIcon>
-                        <FontIcon Glyph="&#xEC05;" />
+                        <FontIcon Glyph="&#xEC05;" Foreground="{StaticResource Cat518Blue}" />
                     </labs:SettingsCard.HeaderIcon>
                     <Grid>
                         <Grid.ColumnDefinitions>
@@ -85,7 +85,7 @@
                 
                 <labs:SettingsCard x:Uid="AutoStartSettings" IsEnabled="{x:Bind ViewModel.IsOpenVREnabled, Mode=OneWay}">
                     <labs:SettingsCard.HeaderIcon>
-                        <FontIcon Glyph="&#xE840;" />
+                        <FontIcon Glyph="&#xE840;" Foreground="{StaticResource Cat518Green}" />
                     </labs:SettingsCard.HeaderIcon>
                     <ToggleSwitch IsOn="{x:Bind ViewModel.AutoStart, Mode=TwoWay}"/>
                 </labs:SettingsCard>
@@ -93,7 +93,7 @@
                 <labs:SettingsExpander Header="Crash Auto-Restart"
                                        Description="Automatically restart crashed tracking modules and relaunch VRCFaceTracking if it crashes (518 fork feature)">
                     <labs:SettingsExpander.HeaderIcon>
-                        <FontIcon Glyph="&#xE72C;" />
+                        <FontIcon Glyph="&#xE72C;" Foreground="{StaticResource Cat518Yellow}" />
                     </labs:SettingsExpander.HeaderIcon>
                     <ToggleSwitch IsOn="{x:Bind ViewModel.AutoRestart.Enabled, Mode=TwoWay}"/>
                     <labs:SettingsExpander.Items>
@@ -137,7 +137,7 @@
                 <labs:SettingsExpander Header="Crash reports"
                                        Description="Every crash is written to a readable report so the cause can be tracked down (518 fork feature)">
                     <labs:SettingsExpander.HeaderIcon>
-                        <FontIcon Glyph="&#xE9D9;" />
+                        <FontIcon Glyph="&#xE9D9;" Foreground="{StaticResource Cat518Red}" />
                     </labs:SettingsExpander.HeaderIcon>
                     <Button Content="Open reports folder" Click="OpenCrashFolder_OnClick"/>
                     <labs:SettingsExpander.Items>
@@ -176,7 +176,7 @@
 
                 <labs:SettingsExpander x:Uid="RiskySettings">
                     <labs:SettingsExpander.HeaderIcon>
-                        <FontIcon Glyph="&#xE7BA;" />
+                        <FontIcon Glyph="&#xE7BA;" Foreground="{StaticResource Cat518Purple}" />
                     </labs:SettingsExpander.HeaderIcon>
                     <ToggleSwitch x:Name="dangerAcceptToggle" Toggled="AcceptToggle_OnToggled" OnContent="Gremlin Mode" IsOn="{x:Bind RiskySettingsViewModel.Enabled, Mode=OneWay}"/>
                     <labs:SettingsExpander.Items>
@@ -206,7 +206,7 @@
                 <!-- Debug Hardware -->
                 <labs:SettingsCard x:Uid="HardwareDebug" ContentAlignment="Vertical">
                     <labs:SettingsCard.HeaderIcon>
-                        <FontIcon Glyph="&#xEBE8;"/>
+                        <FontIcon Glyph="&#xEBE8;" Foreground="{StaticResource Cat518Cyan}" />
                     </labs:SettingsCard.HeaderIcon>
                     <Grid>
                         <Grid.ColumnDefinitions>

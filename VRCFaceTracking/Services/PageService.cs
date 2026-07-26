@@ -21,6 +21,7 @@ public class PageService : IPageService
         Configure<ModuleRegistryViewModel, ModuleRegistryPage>();
         Configure<MutatorViewModel, MutatorPage>();
         Configure<CurvesViewModel, CurvesPage>();
+        Configure<SourcesViewModel, SourcesPage>();
     }
 
     public Type GetPageType(string key)

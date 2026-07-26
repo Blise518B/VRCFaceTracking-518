@@ -54,6 +54,42 @@
     <SolidColorBrush x:Key="Neon518TextDimBrush" Color="{StaticResource Neon518TextDimColor}" />
     <SolidColorBrush x:Key="Neon518ChipBrush" Color="{StaticResource Neon518ChipColor}" />
 
+    <!-- ===================== Category hues =====================
+         The six vibrant category colours from VRC Parameter Relay's palette, used to
+         colour-code sections. Each hue has a vibrant tone (text/icons), a mid tone
+         (borders) and a dark tint (fills), exactly as CATEGORY_PALETTE defines them. -->
+    <SolidColorBrush x:Key="Cat518Green" Color="#4af58c" />
+    <SolidColorBrush x:Key="Cat518GreenEdge" Color="#2f5e3f" />
+    <SolidColorBrush x:Key="Cat518GreenTint" Color="#10291a" />
+
+    <SolidColorBrush x:Key="Cat518Blue" Color="#7aa7ff" />
+    <SolidColorBrush x:Key="Cat518BlueEdge" Color="#3a5384" />
+    <SolidColorBrush x:Key="Cat518BlueTint" Color="#131c30" />
+
+    <SolidColorBrush x:Key="Cat518Cyan" Color="#56d9f2" />
+    <SolidColorBrush x:Key="Cat518CyanEdge" Color="#2f6b7a" />
+    <SolidColorBrush x:Key="Cat518CyanTint" Color="#0e2229" />
+
+    <SolidColorBrush x:Key="Cat518Yellow" Color="#ffb454" />
+    <SolidColorBrush x:Key="Cat518YellowEdge" Color="#6b5320" />
+    <SolidColorBrush x:Key="Cat518YellowTint" Color="#291f0c" />
+
+    <SolidColorBrush x:Key="Cat518Red" Color="#ff5561" />
+    <SolidColorBrush x:Key="Cat518RedEdge" Color="#5c2228" />
+    <SolidColorBrush x:Key="Cat518RedTint" Color="#2a1014" />
+
+    <SolidColorBrush x:Key="Cat518Purple" Color="#d78cff" />
+    <SolidColorBrush x:Key="Cat518PurpleEdge" Color="#5e3f78" />
+    <SolidColorBrush x:Key="Cat518PurpleTint" Color="#221430" />
+
+    <!-- Section card: a hue-tinted fill with a matching hairline, like the relay's
+         category frames. Set BorderBrush/Background per section from the hues above. -->
+    <Style x:Key="Cat518SectionBorderStyle" TargetType="Border">
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="CornerRadius" Value="12" />
+        <Setter Property="Padding" Value="14" />
+    </Style>
+
     <!-- ===================== Shape ===================== -->
     <!-- Their look is noticeably rounder than stock WinUI (buttons 8px, cards 12px) -->
     <CornerRadius x:Key="ControlCornerRadius">8</CornerRadius>
