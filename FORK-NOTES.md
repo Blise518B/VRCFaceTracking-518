@@ -120,6 +120,37 @@ leave the other one alone.
 
 ---
 
+## 5. Neon518 look
+
+`VRCFaceTracking/Styles/NeonTheme.xaml` (merged last in `App.xaml`)
+
+The interface is restyled to match the default **"neon"** theme of
+[VRC Parameter Relay](https://github.com/Blise518B/VRCParameterRelay), so both apps look like
+one set. Palette taken verbatim from that project's `ui/theme.py`:
+
+| Role | Colour |
+| --- | --- |
+| Background | `#0a0c0a` |
+| Panel / nav / header | `#0f120f` |
+| Card | `#121712` (alt `#0e120e`) |
+| Inputs | `#121a13` |
+| Hairline border | `#36a35c` |
+| Accent | `#31f272` (on-accent text `#04150b`) |
+| Text | `#e6efe8` → dim `#94a698` → faint `#5f6f63` |
+| Danger / switch off | `#ff5561` / `#a51830` |
+| Amber (live marker) | `#ffb454` |
+
+Corner radii are bumped to match (controls 8px, cards 12px, chips 10px). Toggle switches go
+red-when-off / green-when-on like the relay's ON/OFF pills, sliders use the green track, and the
+curve editor plot uses the accent green for the curve with the amber live dot.
+
+Implementation note: this is done purely by **overriding WinUI theme brushes and corner radii** —
+no control templates are rewritten. That keeps it robust across WinUI updates and avoids breaking
+built-in control behaviour. The brushes sit at dictionary top level rather than inside
+`ThemeDictionaries`, so the neon look applies regardless of the Windows light/dark setting.
+
+---
+
 ## Building
 
 Requires .NET 10 SDK on Windows.

@@ -22,11 +22,13 @@ public sealed partial class CurveEditorControl : UserControl
     private const double PointRadius = 5.5;
     private const int CurveSamples = 72;
 
-    private static readonly Color CurveColor = Color.FromArgb(255, 76, 194, 255);
-    private static readonly Color PointColor = Color.FromArgb(255, 0, 120, 212);
-    private static readonly Color GridColor = Color.FromArgb(48, 128, 128, 128);
-    private static readonly Color IdentityColor = Color.FromArgb(110, 140, 140, 140);
-    private static readonly Color LiveColor = Color.FromArgb(255, 255, 185, 0);
+    // Neon518 palette, matching VRC Parameter Relay's default theme
+    private static readonly Color CurveColor = Color.FromArgb(255, 0x31, 0xf2, 0x72);      // accent #31f272
+    private static readonly Color PointColor = Color.FromArgb(255, 0x1c, 0xf2, 0x6b);      // switch-on #1cf26b
+    private static readonly Color PointStrokeColor = Color.FromArgb(255, 0x04, 0x15, 0x0b); // on-accent #04150b
+    private static readonly Color GridColor = Color.FromArgb(60, 0x36, 0xa3, 0x5c);        // edge #36a35c, faded
+    private static readonly Color IdentityColor = Color.FromArgb(130, 0x5f, 0x6f, 0x63);   // faint #5f6f63
+    private static readonly Color LiveColor = Color.FromArgb(255, 0xff, 0xb4, 0x54);       // amber #ffb454
 
     private static readonly InputSystemCursor HandCursor = InputSystemCursor.Create(InputSystemCursorShape.Hand);
     private static readonly InputSystemCursor CrossCursor = InputSystemCursor.Create(InputSystemCursorShape.Cross);
@@ -141,7 +143,7 @@ public sealed partial class CurveEditorControl : UserControl
         PlotCanvas.Children.Add(polyline);
 
         var pointFill = new SolidColorBrush(PointColor);
-        var pointStroke = new SolidColorBrush(Colors.White);
+        var pointStroke = new SolidColorBrush(PointStrokeColor);
         foreach (var point in _curve.Points)
         {
             var screen = ToScreen(point.X, point.Y);
