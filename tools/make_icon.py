@@ -217,23 +217,29 @@ def draw(size: int, glyph: QImage, scale: float = DEFAULT_GLYPH_SCALE,
     p.setRenderHint(QPainter.SmoothPixmapTransform)
     s = size / 256.0
 
-    # White disc with the thick black ring
-    x, y, w, h = (v * s for v in RING_RECT)
-    p.setBrush(WHITE)
-    p.setPen(QPen(BLACK, RING_WIDTH * s))
-    p.drawEllipse(QRectF(x, y, w, h))
+    ring_rect = QRectF(*(v * s for v in RING_RECT))
+    # The ring is stroked centred on its path, so its outer edge sits half a
+    # pen width beyond. The body is filled out to there and the ring is stroked
+    # last, on top: if the black half stopped at the ring's inner edge instead,
+    # its anti-aliased boundary and the ring's would share a radius and their
+    # partial coverages would not sum to opaque, leaving a faint hairline.
+    grow = RING_WIDTH / 2.0
+    outer_rect = QRectF(
+        (RING_RECT[0] - grow) * s, (RING_RECT[1] - grow) * s,
+        (RING_RECT[2] + RING_WIDTH) * s, (RING_RECT[3] + RING_WIDTH) * s,
+    )
+    outer = QPainterPath()
+    outer.addEllipse(outer_rect)
 
-    inset = RING_RECT[0] + RING_WIDTH / 2.0
-    span = RING_RECT[2] - RING_WIDTH
-    inner = QPainterPath()
-    inner.addEllipse(QRectF(inset * s, inset * s, span * s, span * s))
+    p.setPen(Qt.NoPen)
+    p.setBrush(WHITE)
+    p.drawEllipse(outer_rect)
 
     if split:
-        # Machine half inverted: fill the left half of the disc's interior
-        # black, so the seam down the middle carries the original's split.
+        # Machine half inverted: fill the left half of the body black, so the
+        # seam down the middle carries the original's split.
         p.save()
-        p.setClipPath(inner)
-        p.setPen(Qt.NoPen)
+        p.setClipPath(outer)
         p.setBrush(BLACK)
         p.drawRect(QRectF(0, 0, size / 2.0, size))
         p.restore()
@@ -256,10 +262,15 @@ def draw(size: int, glyph: QImage, scale: float = DEFAULT_GLYPH_SCALE,
         # into the white avatar half. A hairline seam keeps the two halves
         # separate and, unlike a fixed pixel gutter, stays visible at 16px.
         p.save()
-        p.setClipPath(inner)
+        p.setClipPath(outer)
         p.setPen(QPen(BLACK, max(1.0, 3.0 * s)))
         p.drawLine(QPointF(size / 2.0, 0), QPointF(size / 2.0, size))
         p.restore()
+
+    # Ring last, so it covers the body's edge and any glyph overflow
+    p.setBrush(Qt.NoBrush)
+    p.setPen(QPen(BLACK, RING_WIDTH * s))
+    p.drawEllipse(ring_rect)
 
     p.end()
     return img
