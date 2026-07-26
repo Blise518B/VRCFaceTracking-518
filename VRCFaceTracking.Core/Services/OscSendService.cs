@@ -17,6 +17,7 @@ public class OscSendService
 
     private Socket _sendSocket;
     private readonly byte[] _sendBuffer = new byte[4096];
+    private DateTime _lastNotConnectedWarning = DateTime.MinValue;
 
     private CancellationTokenSource _cts;
     public Action<int> OnMessagesDispatched = _ => { };
@@ -75,10 +76,26 @@ public class OscSendService
         }
     }
 
+    // Dropping sends while the socket is down is fine per tick, but staying silent
+    // about it hides a dead outgoing path behind healthy-looking logs. Warn once a minute.
+    private void WarnNotConnected()
+    {
+        if (DateTime.UtcNow - _lastNotConnectedWarning < TimeSpan.FromMinutes(1))
+        {
+            return;
+        }
+
+        _lastNotConnectedWarning = DateTime.UtcNow;
+        _logger.LogWarning(
+            "OSC send socket is not connected (target {address}:{port}) - dropping outgoing messages. VRChat will not receive tracking data.",
+            _oscTarget.DestinationAddress, _oscTarget.OutPort);
+    }
+
     public async Task Send(OscMessage message, CancellationToken ct)
     {
         if (_sendSocket is not { Connected: true })
         {
+            WarnNotConnected();
             return; // Nothing to send to yet - not an error worth throwing per tick
         }
 
@@ -99,6 +116,7 @@ public class OscSendService
         // tick whenever the socket wasn't up yet - which the sender's catch then escalated.
         if (_sendSocket is not { Connected: true })
         {
+            WarnNotConnected();
             return;
         }
 
