@@ -201,8 +201,24 @@ public static class Program
         return services.BuildServiceProvider();
     }
 
-    /// <summary>One colored run of text; a line is a sequence of these.</summary>
-    private readonly record struct Seg(string Text, ConsoleColor Color);
+    /// <summary>One colored run of text; a line is a sequence of these. A background
+    /// color turns the run into a solid block - that's what a "button" looks like.</summary>
+    private readonly record struct Seg(string Text, ConsoleColor Color, ConsoleColor? Bg = null);
+
+    private enum UiAction { None, SwitchFull, ToggleRouter, Reinit, Quit }
+
+    /// <summary>Clickable cells of the last drawn frame: row + column span per button.</summary>
+    private static readonly List<(int Row, int ColStart, int ColEnd, UiAction Action)> HitRegions = new();
+
+    private static int _reinitRunning;
+    private static string _status = string.Empty;
+    private static DateTime _statusUntil = DateTime.MinValue;
+
+    private static void SetStatus(string text)
+    {
+        _status = text;
+        _statusUntil = DateTime.Now.AddSeconds(4);
+    }
 
     // The neon palette, mapped onto the 16 console colors: green frame/headers,
     // cyan live values, purple (magenta) secondary info, amber notes, red failures.
@@ -226,8 +242,55 @@ public static class Program
         var libManager = services.GetRequiredService<ILibManager>();
         var oscQuery = services.GetRequiredService<OscQueryService>();
         var oscTarget = services.GetRequiredService<IOscTarget>();
+        var routerClient = services.GetRequiredService<OscRouterClient>();
+        var mainService = services.GetRequiredService<IMainService>();
         var switchToFull = false;
         var canSwitch = LaunchMode.CanHandOff(LaunchMode.FullExeName);
+
+        void Perform(UiAction action)
+        {
+            switch (action)
+            {
+                case UiAction.SwitchFull when canSwitch:
+                    switchToFull = true;
+                    cts.Cancel();
+                    break;
+                case UiAction.Quit:
+                    cts.Cancel();
+                    break;
+                case UiAction.ToggleRouter:
+                    routerClient.Enabled = !routerClient.Enabled;
+                    SetStatus(routerClient.Enabled
+                        ? "router 518: subscribed again"
+                        : "router 518: off (native OSC only)");
+                    break;
+                case UiAction.Reinit:
+                    // Same as the full app's Force Re-init; guarded so mashing the
+                    // button can't stack teardowns on top of each other.
+                    if (Interlocked.CompareExchange(ref _reinitRunning, 1, 0) == 0)
+                    {
+                        SetStatus("reinitializing modules...");
+                        _ = Task.Run(async () =>
+                        {
+                            try
+                            {
+                                await mainService.Teardown();
+                                await mainService.InitializeAsync();
+                                SetStatus("modules reinitialized");
+                            }
+                            catch (Exception e)
+                            {
+                                SetStatus($"reinit failed: {e.Message}");
+                            }
+                            finally
+                            {
+                                _reinitRunning = 0;
+                            }
+                        });
+                    }
+                    break;
+            }
+        }
 
         // A redirected stdout (SteamVR's log capture, `lite.exe > file`) has no
         // console buffer, so Clear/SetCursorPosition throw "handle is invalid".
@@ -246,6 +309,10 @@ public static class Program
                 interactive = false;
             }
         }
+
+        // Mouse + keyboard reader; if it can't take over the input buffer (redirected
+        // stdin, exotic host) the loop below falls back to plain key polling.
+        using var input = interactive ? new ConsoleInput() : null;
 
         var lastPlainPrint = DateTime.MinValue;
         while (!token.IsCancellationRequested)
@@ -308,32 +375,107 @@ public static class Program
             lines.Add(Line(new Seg("    out ", Dim), new Seg($"{_outPerSec,5}", outColor),
                            new Seg(" msg/s   port ", Dim), new Seg(oscTarget.OutPort.ToString(), Body)));
             lines.Add(Blank);
-            lines.Add(Line(new Seg("  Settings, curves and calibration live in the full app.", Dim)));
-            lines.Add(canSwitch && interactive
-                ? Line(new Seg("  [F]", KeyHint), new Seg(" switch to the full app    ", Dim),
-                       new Seg("[Ctrl+C]", KeyHint), new Seg(" quit", Dim))
-                : Line(new Seg("  [Ctrl+C]", KeyHint), new Seg(" quit", Dim)));
+            var statusVisible = DateTime.Now < _statusUntil && _status.Length > 0;
+            lines.Add(statusVisible
+                ? Line(new Seg($"  {_status}", Note))
+                : Line(new Seg("  Settings, curves and calibration live in the full app.", Dim)));
+
+            if (interactive)
+            {
+                // Button row: solid color blocks, click regions recorded per frame
+                HitRegions.Clear();
+                var buttonRow = lines.Count;
+                var buttonSegs = new List<Seg> { new("  ", Body) };
+                var col = 2;
+
+                void AddButton(string label, ConsoleColor fg, ConsoleColor bg, UiAction action)
+                {
+                    HitRegions.Add((buttonRow, col, col + label.Length - 1, action));
+                    buttonSegs.Add(new Seg(label, fg, bg));
+                    buttonSegs.Add(new Seg("  ", Body));
+                    col += label.Length + 2;
+                }
+
+                if (canSwitch)
+                {
+                    AddButton("[ FULL APP ]", ConsoleColor.Black, ConsoleColor.Green, UiAction.SwitchFull);
+                }
+                AddButton(routerClient.Enabled ? "[ ROUTER ON ]" : "[ ROUTER OFF ]",
+                    routerClient.Enabled ? ConsoleColor.Black : ConsoleColor.Gray,
+                    routerClient.Enabled ? ConsoleColor.Cyan : ConsoleColor.DarkGray,
+                    UiAction.ToggleRouter);
+                AddButton(_reinitRunning == 1 ? "[ REINIT... ]" : "[ REINIT ]",
+                    ConsoleColor.Black, ConsoleColor.DarkYellow, UiAction.Reinit);
+                AddButton("[ QUIT ]", ConsoleColor.White, ConsoleColor.DarkRed, UiAction.Quit);
+                lines.Add(buttonSegs.ToArray());
+                lines.Add(Line(new Seg("  click a button, or keys: ", Dim),
+                    new Seg("F", KeyHint), new Seg(" full app  ", Dim),
+                    new Seg("R", KeyHint), new Seg(" router  ", Dim),
+                    new Seg("I", KeyHint), new Seg(" reinit  ", Dim),
+                    new Seg("Q", KeyHint), new Seg(" quit", Dim)));
+            }
+            else
+            {
+                lines.Add(Line(new Seg("  [Ctrl+C]", KeyHint), new Seg(" quit", Dim)));
+            }
 
             if (interactive)
             {
                 Draw(lines);
 
-                // Keyboard: F hands this session back to the full app
-                try
+                if (input is { Active: true })
                 {
-                    while (Console.KeyAvailable)
+                    while (input.TryDequeue(out var ev))
                     {
-                        var key = Console.ReadKey(intercept: true);
-                        if (key.Key == ConsoleKey.F && canSwitch)
+                        var action = UiAction.None;
+                        if (ev.IsClick)
                         {
-                            switchToFull = true;
-                            cts.Cancel();
+                            foreach (var region in HitRegions)
+                            {
+                                if (ev.Y == region.Row && ev.X >= region.ColStart && ev.X <= region.ColEnd)
+                                {
+                                    action = region.Action;
+                                    break;
+                                }
+                            }
                         }
+                        else
+                        {
+                            action = ev.Key switch
+                            {
+                                ConsoleKey.F => UiAction.SwitchFull,
+                                ConsoleKey.R => UiAction.ToggleRouter,
+                                ConsoleKey.I => UiAction.Reinit,
+                                ConsoleKey.Q => UiAction.Quit,
+                                _ => UiAction.None,
+                            };
+                        }
+
+                        Perform(action);
                     }
                 }
-                catch (Exception)
+                else
                 {
-                    // Redirected/absent stdin; keys simply aren't available
+                    // Input reader unavailable: plain key polling still works
+                    try
+                    {
+                        while (Console.KeyAvailable)
+                        {
+                            var key = Console.ReadKey(intercept: true);
+                            Perform(key.Key switch
+                            {
+                                ConsoleKey.F => UiAction.SwitchFull,
+                                ConsoleKey.R => UiAction.ToggleRouter,
+                                ConsoleKey.I => UiAction.Reinit,
+                                ConsoleKey.Q => UiAction.Quit,
+                                _ => UiAction.None,
+                            });
+                        }
+                    }
+                    catch (Exception)
+                    {
+                        // Redirected/absent stdin; keys simply aren't available
+                    }
                 }
             }
             else if (DateTime.Now - lastPlainPrint >= TimeSpan.FromSeconds(5))
@@ -428,6 +570,8 @@ public static class Program
         {
             var width = Math.Max(40, Math.Min(Console.WindowWidth - 1, 100));
             Console.SetCursorPosition(0, 0);
+            Console.ResetColor();
+            var defaultBg = Console.BackgroundColor;
             foreach (var line in lines)
             {
                 var remaining = width;
@@ -440,6 +584,7 @@ public static class Program
 
                     var text = seg.Text.Length > remaining ? seg.Text[..remaining] : seg.Text;
                     Console.ForegroundColor = seg.Color;
+                    Console.BackgroundColor = seg.Bg ?? defaultBg;
                     Console.Write(text);
                     remaining -= text.Length;
                 }
