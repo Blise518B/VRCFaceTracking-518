@@ -53,6 +53,32 @@ public class OscSendService
         };
     }
 
+    /// <summary>
+    /// Establishes the send socket from the current target values. Must be called
+    /// once after settings load: the PropertyChanged hook above only fires when a
+    /// loaded value DIFFERS from the field default, so a saved 9000 loading onto a
+    /// 9000 default raises no event and - without this - no socket ever connects.
+    /// </summary>
+    public void EnsureConnected()
+    {
+        if (_sendSocket is { Connected: true })
+        {
+            return;
+        }
+
+        if (_oscTarget.OutPort <= 0)
+        {
+            return; // Nothing valid to connect to; the change handler covers later repair
+        }
+
+        if (string.IsNullOrEmpty(_oscTarget.DestinationAddress))
+        {
+            _oscTarget.DestinationAddress = "127.0.0.1";
+        }
+
+        UpdateTarget(new IPEndPoint(IPAddress.Parse(_oscTarget.DestinationAddress), _oscTarget.OutPort));
+    }
+
     private void UpdateTarget(IPEndPoint endpoint)
     {
         _cts.Cancel();

@@ -20,6 +20,7 @@ public partial class OscQueryService(
     IOscTarget oscTarget,
     MulticastDnsService multicastDnsService,
     OscRecvService recvService,
+    OscSendService sendService,
     ILocalSettingsService settingsService,
     HttpHandler httpHandler,
     IDispatcherService dispatcherService)
@@ -42,6 +43,11 @@ public partial class OscQueryService(
         {
             return;  // Return both false as we cant bind to anything without an address
         }
+
+        // Connect the send socket deterministically now that settings are loaded.
+        // Face tracking output must never hinge on whether the loaded port value
+        // happened to differ from the field default (see EnsureConnected).
+        sendService.EnsureConnected();
 
         multicastDnsService.OnVrcClientDiscovered += FirstClientDiscovered;
 
