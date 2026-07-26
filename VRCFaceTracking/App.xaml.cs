@@ -177,9 +177,64 @@ public partial class App : Application
         // Kill any other instances of VRCFaceTracking.exe and our module processes
         Core.Utils.KillAllProcessesOfName("VRCFaceTracking");
         Core.Utils.KillAllProcessesOfName("VRCFaceTracking.ModuleProcess");
-        
+
+        StartCrashWatchdog();
+
         await App.GetService<IActivationService>().ActivateAsync(args);
         await Host.StartAsync();
+    }
+
+    /// <summary>
+    /// Spawns the companion watchdog process that relaunches VRCFaceTracking if it crashes.
+    /// The restart counter is threaded through relaunches so a crash loop caps out instead
+    /// of restarting forever.
+    /// </summary>
+    private void StartCrashWatchdog()
+    {
+        try
+        {
+            var watchdogPath = Path.Combine(AppContext.BaseDirectory, "VRCFaceTracking.Watchdog.exe");
+            if (!File.Exists(watchdogPath))
+            {
+                _logger?.LogWarning("Crash watchdog not found at {path}. Auto-relaunch is disabled.", watchdogPath);
+                return;
+            }
+
+            var exePath = Environment.ProcessPath;
+            if (string.IsNullOrEmpty(exePath))
+            {
+                _logger?.LogWarning("Could not determine own executable path. Auto-relaunch is disabled.");
+                return;
+            }
+
+            // If we were just relaunched by a watchdog, it passed us the consecutive restart count
+            var restartCount = 0;
+            var cmdArgs = Environment.GetCommandLineArgs();
+            for (var i = 0; i < cmdArgs.Length - 1; i++)
+            {
+                if (cmdArgs[i] == "--restarted-count" && int.TryParse(cmdArgs[i + 1], out var parsed))
+                {
+                    restartCount = parsed;
+                    _logger?.LogInformation("VRCFaceTracking was automatically relaunched after a crash (restart {count}).", parsed);
+                    break;
+                }
+            }
+
+            // Any watchdog attached to an instance we just killed notices us running and exits
+            // on its own, so it's safe to always spawn a fresh one for ourselves.
+            Process.Start(new ProcessStartInfo(watchdogPath)
+            {
+                Arguments = $"--watch-pid {Environment.ProcessId} --exe \"{exePath}\" --restart-count {restartCount}",
+                WorkingDirectory = AppContext.BaseDirectory,
+                CreateNoWindow = true,
+                WindowStyle = ProcessWindowStyle.Hidden,
+            });
+            _logger?.LogInformation("Crash watchdog started.");
+        }
+        catch (Exception e)
+        {
+            _logger?.LogWarning("Failed to start crash watchdog: {message}. Auto-relaunch is disabled.", e.Message);
+        }
     }
     
     [SecurityCritical]
