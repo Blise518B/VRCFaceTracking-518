@@ -40,6 +40,27 @@ public sealed partial class ShellPage : Page
     {
         KeyboardAccelerators.Add(BuildKeyboardAccelerator(VirtualKey.Left, VirtualKeyModifiers.Menu));
         KeyboardAccelerators.Add(BuildKeyboardAccelerator(VirtualKey.GoBack));
+
+        // Nothing to switch to in a build without the console exe alongside it
+        LiteConsoleNavItem.Visibility = ModeSwitcher.LiteAvailable
+            ? Visibility.Visible
+            : Visibility.Collapsed;
+    }
+
+    /// <summary>
+    /// The Lite Console footer entry runs an action instead of navigating, so it's handled
+    /// here; NavigationViewService ignores it (no NavigateTo attached property).
+    /// </summary>
+    private async void NavigationViewControl_ItemInvoked(NavigationView sender, NavigationViewItemInvokedEventArgs args)
+    {
+        if (!ReferenceEquals(args.InvokedItemContainer, LiteConsoleNavItem))
+        {
+            return;
+        }
+
+        // Keep the real page highlighted rather than leaving an action looking "selected"
+        sender.SelectedItem = ViewModel.Selected;
+        await ModeSwitcher.SwitchToLiteAsync();
     }
 
     private void MainWindow_Activated(object sender, WindowActivatedEventArgs args)

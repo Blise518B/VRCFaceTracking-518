@@ -24,6 +24,12 @@ internal sealed class ConsoleInput : IDisposable
 
     public bool Active { get; }
 
+    /// <summary>How many input records we've accepted - proves the wiring end to end.</summary>
+    public int MouseEventsSeen { get; private set; }
+
+    /// <summary>Why mouse input is or isn't available, for the startup trace.</summary>
+    public string Status { get; private set; } = "not initialized";
+
     public ConsoleInput()
     {
         try
@@ -31,23 +37,35 @@ internal sealed class ConsoleInput : IDisposable
             _handle = GetStdHandle(STD_INPUT_HANDLE);
             if (_handle == -1 || _handle == 0 || !GetConsoleMode(_handle, out _originalMode))
             {
-                return; // Redirected or absent stdin: stay inert, caller falls back
+                Status = "no console input handle (redirected stdin?)";
+                return; // Stay inert, caller falls back to key polling
             }
 
-            // Quick-edit mode eats mouse events for its select-to-copy feature, and
-            // clearing it only takes effect alongside ENABLE_EXTENDED_FLAGS.
+            // Three flags matter here:
+            //  - ENABLE_MOUSE_INPUT: deliver mouse records at all.
+            //  - ENABLE_QUICK_EDIT_MODE off: quick-edit swallows clicks for its
+            //    select-to-copy behaviour, and clearing it requires EXTENDED_FLAGS.
+            //  - ENABLE_VIRTUAL_TERMINAL_INPUT off: with VT input on (the norm inside
+            //    terminals) mouse activity arrives as escape sequences on stdin instead
+            //    of INPUT_RECORDs, so ReadConsoleInput never sees a click.
+            // ENABLE_PROCESSED_INPUT stays on so Ctrl+C still reaches CancelKeyPress.
             var mode = (_originalMode | ENABLE_MOUSE_INPUT | ENABLE_EXTENDED_FLAGS)
-                       & ~ENABLE_QUICK_EDIT_MODE;
+                       & ~(ENABLE_QUICK_EDIT_MODE | ENABLE_VIRTUAL_TERMINAL_INPUT
+                           | ENABLE_LINE_INPUT | ENABLE_ECHO_INPUT);
             if (!SetConsoleMode(_handle, mode))
             {
+                Status = $"SetConsoleMode failed (err {Marshal.GetLastWin32Error()})";
                 return;
             }
 
+            GetConsoleMode(_handle, out var applied);
+            Status = $"mouse input on (mode 0x{_originalMode:X} -> 0x{applied:X})";
             Active = true;
             new Thread(ReadLoop) { IsBackground = true, Name = "Console-Input" }.Start();
         }
-        catch (Exception)
+        catch (Exception e)
         {
+            Status = $"unavailable: {e.GetType().Name}";
             Active = false;
         }
     }
@@ -73,6 +91,12 @@ internal sealed class ConsoleInput : IDisposable
                         && rec.MouseEvent.dwEventFlags == 0                       // a button change, not move/wheel
                         && (rec.MouseEvent.dwButtonState & LEFT_BUTTON) != 0)     // left button now down
                     {
+                        if (MouseEventsSeen == 0)
+                        {
+                            ConsoleWindow.Breadcrumb(
+                                $"first click at cell x={rec.MouseEvent.dwMousePosition.X} y={rec.MouseEvent.dwMousePosition.Y}");
+                        }
+                        MouseEventsSeen++;
                         _events.Enqueue(new Event(true,
                             rec.MouseEvent.dwMousePosition.X, rec.MouseEvent.dwMousePosition.Y, default));
                     }
@@ -107,9 +131,12 @@ internal sealed class ConsoleInput : IDisposable
     }
 
     private const int STD_INPUT_HANDLE = -10;
+    private const uint ENABLE_LINE_INPUT = 0x0002;
+    private const uint ENABLE_ECHO_INPUT = 0x0004;
     private const uint ENABLE_MOUSE_INPUT = 0x0010;
     private const uint ENABLE_QUICK_EDIT_MODE = 0x0040;
     private const uint ENABLE_EXTENDED_FLAGS = 0x0080;
+    private const uint ENABLE_VIRTUAL_TERMINAL_INPUT = 0x0200;
     private const ushort KEY_EVENT = 1;
     private const ushort MOUSE_EVENT = 2;
     private const uint LEFT_BUTTON = 0x0001;
@@ -155,7 +182,7 @@ internal sealed class ConsoleInput : IDisposable
     [DllImport("kernel32.dll", SetLastError = true)]
     private static extern bool GetConsoleMode(nint hConsoleInput, out uint lpMode);
 
-    [DllImport("kernel32.dll", SetLastError = true)]
+    [DllImport("kernel32.dll", SetLastError = true, EntryPoint = "SetConsoleMode")]
     private static extern bool SetConsoleMode(nint hConsoleInput, uint dwMode);
 
     [DllImport("kernel32.dll", SetLastError = true, CharSet = CharSet.Unicode, EntryPoint = "ReadConsoleInputW")]

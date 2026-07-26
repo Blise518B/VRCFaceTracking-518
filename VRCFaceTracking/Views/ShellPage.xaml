@@ -34,6 +34,7 @@
             IsSettingsVisible="True"
             ExpandedModeThresholdWidth="1280"
             DisplayModeChanged="NavigationViewControl_DisplayModeChanged"
+            ItemInvoked="NavigationViewControl_ItemInvoked"
             Header="{x:Bind ((ContentControl)ViewModel.Selected).Content, Mode=OneWay}">
             <NavigationView.MenuItems>
                 <!--
@@ -79,6 +80,17 @@
                     </NavigationViewItem.Icon>
                 </NavigationViewItem>
             </NavigationView.MenuItems>
+            <!-- An action, not a page: switches this session to the console monitor.
+                 Lives in the pane because it's needed often, especially during setup. -->
+            <NavigationView.FooterMenuItems>
+                <NavigationViewItem x:Name="LiteConsoleNavItem"
+                                    Content="Lite Console"
+                                    ToolTipService.ToolTip="Switch this session to the lightweight console monitor right now. Press F (or click FULL APP) in the console to come back.">
+                    <NavigationViewItem.Icon>
+                        <FontIcon FontFamily="{StaticResource SymbolThemeFontFamily}" Glyph="&#xE7F4;" Foreground="{StaticResource Cat518Cyan}"/>
+                    </NavigationViewItem.Icon>
+                </NavigationViewItem>
+            </NavigationView.FooterMenuItems>
             <NavigationView.HeaderTemplate>
                 <DataTemplate>
                     <Grid>

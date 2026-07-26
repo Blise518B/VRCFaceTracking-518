@@ -48,7 +48,23 @@ public static class Program
         {
         }
 
+        ConsoleWindow.Breadcrumb($"start args=[{string.Join(' ', args)}] console={ConsoleWindow.Describe()}");
+
+        // Get our own window before touching anything else, so the copy that actually does
+        // the work is the one holding the crash marker and the OSC ports.
+        if (ConsoleWindow.WantsOwnWindow(args))
+        {
+            if (ConsoleWindow.TryRelaunchInOwnWindow(args))
+            {
+                ConsoleWindow.Breadcrumb("relaunched in own console window, exiting this copy");
+                return 0;
+            }
+            ConsoleWindow.Breadcrumb("could not get own window, carrying on in this one");
+        }
+
         Console.Title = "VRCFaceTracking Lite - Blise518B Edition";
+        ConsoleWindow.SetIcon();
+        ConsoleWindow.Breadcrumb("title + icon set");
         CrashReportService.EarlyStartup();
 
         // When the full app hands over to us it is still finishing its clean shutdown
@@ -313,6 +329,10 @@ public static class Program
         // Mouse + keyboard reader; if it can't take over the input buffer (redirected
         // stdin, exotic host) the loop below falls back to plain key polling.
         using var input = interactive ? new ConsoleInput() : null;
+        if (input != null)
+        {
+            ConsoleWindow.Breadcrumb($"input: {input.Status}");
+        }
 
         var lastPlainPrint = DateTime.MinValue;
         while (!token.IsCancellationRequested)
@@ -408,7 +428,10 @@ public static class Program
                     ConsoleColor.Black, ConsoleColor.DarkYellow, UiAction.Reinit);
                 AddButton("[ QUIT ]", ConsoleColor.White, ConsoleColor.DarkRed, UiAction.Quit);
                 lines.Add(buttonSegs.ToArray());
-                lines.Add(Line(new Seg("  click a button, or keys: ", Dim),
+                // Say "click" only when mouse input is genuinely available, so the hint
+                // never promises something this console host won't deliver.
+                var mouseOn = input is { Active: true };
+                lines.Add(Line(new Seg(mouseOn ? "  click a button, or keys: " : "  keys (no mouse here): ", Dim),
                     new Seg("F", KeyHint), new Seg(" full app  ", Dim),
                     new Seg("R", KeyHint), new Seg(" router  ", Dim),
                     new Seg("I", KeyHint), new Seg(" reinit  ", Dim),
