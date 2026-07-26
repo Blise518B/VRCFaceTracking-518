@@ -55,9 +55,11 @@ public class UnifiedLibManager : ILibManager
     #endregion
 
     private readonly AutoRestartService _autoRestartService;
+    private readonly CrashReportService _crashReportService;
 
-    public UnifiedLibManager(ILoggerFactory factory, IDispatcherService dispatcherService, IModuleDataService moduleDataService, AutoRestartService autoRestartService)
+    public UnifiedLibManager(ILoggerFactory factory, IDispatcherService dispatcherService, IModuleDataService moduleDataService, AutoRestartService autoRestartService, CrashReportService crashReportService)
     {
+        _crashReportService = crashReportService;
         _loggerFactory = factory;
         _logger = factory.CreateLogger<UnifiedLibManager>();
         _moduleLogger = factory.CreateLogger("\0VRCFT\0");
@@ -190,6 +192,7 @@ public class UnifiedLibManager : ILibManager
         }
 
         _logger.LogWarning("Module {module} (PID {pid}) died unexpectedly with exit code {code}.", moduleName, module.SandboxProcessPID, exitCode);
+        _crashReportService?.ReportModuleCrash(moduleName, exitCode, module.GetOutputTail());
 
         if ( !CanRestart(module.SandboxModulePath) )
         {
@@ -504,31 +507,19 @@ public class UnifiedLibManager : ILibManager
         {
             try
             {
-                // Start subprocess
+                // Start subprocess. Output is redirected in every configuration, not just
+                // DEBUG, so a crashed module's own error text can go into the crash report.
                 var sandboxProcess  = Process.Start(new ProcessStartInfo(
                     _sandboxProcessPath, $"--port {_sandboxServer.Port} --module-path \"{dll}\" --parent-pid {Environment.ProcessId}"
                 )
                 {
+                    RedirectStandardError = true,
+                    RedirectStandardOutput = true,
 #if !DEBUG
                     CreateNoWindow = true,
                     WindowStyle = ProcessWindowStyle.Hidden,
-#else
-                    // In debug mode we connect stdout and stderr
-                    RedirectStandardError = true,
-                    RedirectStandardOutput = true,
 #endif
                 });
-
-#if DEBUG
-                // Start a thread to copy stderr and stdout to debug
-                new Thread(() =>
-                {
-                    string output = sandboxProcess.StandardOutput.ReadToEnd();
-                    output = output + sandboxProcess.StandardError.ReadToEnd();
-                    sandboxProcess.WaitForExit();
-                    Debug.WriteLine(output);
-                }).Start();
-#endif
 
                 var pid             = sandboxProcess.Id;
 
@@ -544,6 +535,19 @@ public class UnifiedLibManager : ILibManager
                     ModuleInformation   = new (),
                     EventBus            = new ()
                 };
+                // Drain both pipes asynchronously. This is not optional: a redirected pipe
+                // that nobody reads fills up and blocks the child process.
+                sandboxProcess.OutputDataReceived += (_, e) =>
+                {
+                    if (e.Data != null) runtimeInfo.RecordOutput(e.Data);
+                };
+                sandboxProcess.ErrorDataReceived += (_, e) =>
+                {
+                    if (e.Data != null) runtimeInfo.RecordOutput($"[stderr] {e.Data}");
+                };
+                sandboxProcess.BeginOutputReadLine();
+                sandboxProcess.BeginErrorReadLine();
+
                 lock ( AvailableSandboxModules )
                 {
                     _logger.LogDebug("Started sandbox process with dll {dllPath}", dll);

@@ -40,6 +40,42 @@ waits for the app to exit:
 
 The watchdog logs every decision to `%APPDATA%\VRCFaceTracking\watchdog.log`.
 
+### Crash reports
+
+`VRCFaceTracking.Core/Services/CrashReportService.cs`
+
+Restarting automatically is only half the job — you also want to know *why*. Every crash now
+writes a readable report to **`Documents\VRCFaceTracking\crashes\`**, alongside a one-line-per-crash
+`history.log` index. The newest 20 reports are kept. Settings → **Crash reports** shows the most
+recent one and has a button to open the folder.
+
+Each report contains the app version, how long the session lasted, whether it was itself an
+automatic relaunch, an environment block (OS, .NET, memory, and **whether VRChat / SteamVR /
+SRanipal were running** — a lot of tracking crashes only happen in particular combinations), and
+the last 150 log lines.
+
+Three kinds of crash are covered, because they need completely different handling:
+
+| Kind | How it's caught | What you get |
+| --- | --- | --- |
+| Managed exception | `Application.UnhandledException`, plus `AppDomain.UnhandledException` and `TaskScheduler.UnobservedTaskException` — the latter two matter because tracking code runs on background threads and faulted tasks, which the UI-thread handler never sees | Full exception chain with types, messages and stack traces, inner exceptions included |
+| Hard crash | Nothing managed runs at all (native access violation, stack overflow, process killed). Detected on the *next* start via a run marker the dead process left behind | Previous PID/version, how long it survived, and the archived previous log |
+| Module process crash | Reported by the sandbox supervisor | Module name, decoded exit code (e.g. `0xC0000005 ACCESS_VIOLATION`), and the module's own stdout/stderr tail |
+
+Two things this required fixing along the way:
+
+- `LogFileProvider` opens `latest.log` with `FileMode.Create`, so **every start wiped the previous
+  run's log**. With the watchdog relaunching automatically, the evidence was being destroyed
+  seconds after the crash. The log is now archived to `crashes\previous-run.log` before logging
+  initialises.
+- Module process stdout/stderr was only redirected in `DEBUG` builds and thrown away otherwise.
+  It's now captured in every configuration into a bounded rolling buffer, because native tracking
+  SDKs report their failures there rather than through .NET.
+
+> Note: killing the app from Task Manager is indistinguishable from a hard crash, so it will be
+> reported as one. `update.bat` clears the marker itself, so rebuilding doesn't create a phantom
+> report.
+
 ### Settings section
 
 Settings has a **Crash Auto-Restart** section (on by default) that controls both the module

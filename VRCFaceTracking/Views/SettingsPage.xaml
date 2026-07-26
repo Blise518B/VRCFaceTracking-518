@@ -134,6 +134,46 @@
                     </labs:SettingsExpander.Items>
                 </labs:SettingsExpander>
 
+                <labs:SettingsExpander Header="Crash reports"
+                                       Description="Every crash is written to a readable report so the cause can be tracked down (518 fork feature)">
+                    <labs:SettingsExpander.HeaderIcon>
+                        <FontIcon Glyph="&#xE9D9;" />
+                    </labs:SettingsExpander.HeaderIcon>
+                    <Button Content="Open reports folder" Click="OpenCrashFolder_OnClick"/>
+                    <labs:SettingsExpander.Items>
+                        <labs:SettingsCard Header="Most recent crash"
+                                           HorizontalContentAlignment="Left"
+                                           ContentAlignment="Vertical">
+                            <TextBlock Text="{x:Bind LastCrashText, Mode=OneWay}"
+                                       Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                       TextWrapping="Wrap"/>
+                        </labs:SettingsCard>
+                        <labs:SettingsCard Header="Saved reports"
+                                           Description="Newest first, up to the last 20. Send one of these along if you want a crash looked at."
+                                           HorizontalContentAlignment="Stretch"
+                                           ContentAlignment="Vertical">
+                            <StackPanel>
+                                <TextBlock Text="No crash reports - nothing has crashed since this was added."
+                                           Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                           Visibility="{x:Bind NoCrashReportsVisibility, Mode=OneWay}"
+                                           TextWrapping="Wrap"/>
+                                <ItemsControl ItemsSource="{x:Bind ViewModel.CrashReportNames, Mode=OneWay}">
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate x:DataType="x:String">
+                                            <TextBlock Text="{x:Bind}"
+                                                       FontFamily="Consolas"
+                                                       FontSize="12"
+                                                       Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                                       TextWrapping="Wrap"
+                                                       Margin="0,1,0,1"/>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+                            </StackPanel>
+                        </labs:SettingsCard>
+                    </labs:SettingsExpander.Items>
+                </labs:SettingsExpander>
+
                 <labs:SettingsExpander x:Uid="RiskySettings">
                     <labs:SettingsExpander.HeaderIcon>
                         <FontIcon Glyph="&#xE7BA;" />

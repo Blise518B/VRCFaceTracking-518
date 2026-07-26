@@ -7,6 +7,11 @@ taskkill /IM VRCFaceTracking.Watchdog.exe /F >nul 2>&1
 taskkill /IM VRCFaceTracking.exe /F >nul 2>&1
 taskkill /IM VRCFaceTracking.ModuleProcess.exe /F >nul 2>&1
 
+rem We just force-killed the app, which leaves the crash reporter's run marker behind
+rem and would be reported as a hard crash on the next start. Clear it - this shutdown
+rem was deliberate. (Documents may be redirected to OneDrive, so resolve it properly.)
+powershell -NoProfile -Command "$m = Join-Path ([Environment]::GetFolderPath('MyDocuments')) 'VRCFaceTracking\crashes\running.marker'; Remove-Item -Force -ErrorAction SilentlyContinue $m" >nul 2>&1
+
 echo Building latest version...
 dotnet build "%~dp0VRCFaceTracking.sln" -c Release -p:Platform=x64 -p:WindowsPackageType=None
 if errorlevel 1 (

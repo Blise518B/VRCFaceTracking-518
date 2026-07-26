@@ -64,6 +64,39 @@ public class ModuleRuntimeInfo
     /// Queue of packets to send
     /// </summary>
     public Queue<QueuedPacket> EventBus;
+
+    /// <summary>
+    /// Rolling tail of the module process's own stdout/stderr. Native tracking SDKs tend to
+    /// report failures here rather than through .NET, so this is the most useful evidence
+    /// when a module dies. Bounded so a chatty module can't grow it without limit.
+    /// </summary>
+    private readonly Queue<string> _outputTail = new();
+    private const int MaxOutputLines = 60;
+
+    public void RecordOutput(string line)
+    {
+        if (string.IsNullOrWhiteSpace(line))
+        {
+            return;
+        }
+
+        lock (_outputTail)
+        {
+            _outputTail.Enqueue(line);
+            while (_outputTail.Count > MaxOutputLines)
+            {
+                _outputTail.Dequeue();
+            }
+        }
+    }
+
+    public string GetOutputTail()
+    {
+        lock (_outputTail)
+        {
+            return string.Join(Environment.NewLine, _outputTail);
+        }
+    }
 }
 
 public struct QueuedPacket

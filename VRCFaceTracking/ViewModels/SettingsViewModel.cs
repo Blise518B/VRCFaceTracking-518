@@ -51,17 +51,29 @@ public partial class SettingsViewModel : ObservableRecipient
         get;
     }
 
+    public CrashReportService CrashReports
+    {
+        get;
+    }
+
+    /// <summary>Newest-first list of crash report filenames, for the settings page.</summary>
+    public List<string> CrashReportNames =>
+        CrashReports.RecentReports().Select(f => $"{f.LastWriteTime:yyyy-MM-dd HH:mm}   {f.Name}").ToList();
+
+    public bool HasCrashReports => CrashReports.RecentReports().Any();
+
     private async void LoadContributors()
     {
         Contributors = await GithubService.GetContributors("benaclejames/VRCFaceTracking");
     }
 
-    public SettingsViewModel(IThemeSelectorService themeSelectorService, GithubService githubService, OpenVRService openVRService, AutoRestartService autoRestartService)
+    public SettingsViewModel(IThemeSelectorService themeSelectorService, GithubService githubService, OpenVRService openVRService, AutoRestartService autoRestartService, CrashReportService crashReportService)
     {
         _themeSelectorService = themeSelectorService;
         GithubService = githubService;
         OpenVRService = openVRService;
         AutoRestart = autoRestartService;
+        CrashReports = crashReportService;
 
         _elementTheme = _themeSelectorService.Theme;
 

@@ -8,6 +8,7 @@ using Windows.System;
 using Microsoft.UI.Xaml.Media.Imaging;
 using VRCFaceTracking.Core.Contracts;
 using VRCFaceTracking.Core.Params.Data;
+using VRCFaceTracking.Core.Services;
 using VrcftImage = VRCFaceTracking.Core.Types.Image;
 
 namespace VRCFaceTracking.Views;
@@ -19,6 +20,25 @@ public sealed partial class SettingsPage : Page, INotifyPropertyChanged
     public bool HasNoRestartEvents => ViewModel.AutoRestart.RecentEvents.Count == 0;
 
     private void ResetRestartStats_OnClick(object sender, RoutedEventArgs e) => ViewModel.AutoRestart.ResetStats();
+
+    public string LastCrashText =>
+        ViewModel.CrashReports.LastCrashSummary ?? "Nothing recorded in this session.";
+
+    public Visibility NoCrashReportsVisibility =>
+        ViewModel.HasCrashReports ? Visibility.Collapsed : Visibility.Visible;
+
+    private async void OpenCrashFolder_OnClick(object sender, RoutedEventArgs e)
+    {
+        try
+        {
+            Directory.CreateDirectory(CrashReportService.CrashDirectory);
+            await Launcher.LaunchFolderPathAsync(CrashReportService.CrashDirectory);
+        }
+        catch (Exception)
+        {
+            // Explorer refusing to open is not worth crashing the settings page over
+        }
+    }
 
     public string Version
     {

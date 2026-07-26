@@ -41,6 +41,25 @@ public partial class App : Application
     
     private ILogger? _logger;
 
+    /// <summary>
+    /// Crash reporter, resolved defensively: it must still work if DI itself is the thing
+    /// that broke, which is exactly when a crash report matters most.
+    /// </summary>
+    private static CrashReportService? CrashReporter
+    {
+        get
+        {
+            try
+            {
+                return GetService<CrashReportService>();
+            }
+            catch (Exception)
+            {
+                return null;
+            }
+        }
+    }
+
     public static T GetService<T>()
         where T : class
     {
@@ -57,7 +76,12 @@ public partial class App : Application
     public App()
     {
         InitializeComponent();
-        
+
+        // Before anything configures logging: LogFileProvider opens latest.log with
+        // FileMode.Create, so the previous run's log has to be archived first or the
+        // watchdog's automatic relaunch destroys the crash evidence within seconds.
+        CrashReportService.EarlyStartup();
+
         // Check for a "reset" file in the root of the app directory. If one is found, wipe all files from inside it
         // and delete the file.
         var resetFile = Path.Combine(VRCFaceTracking.Core.Utils.PersistentDataDirectory, "reset");
@@ -119,6 +143,7 @@ public partial class App : Application
             services.AddSingleton<ParameterSenderService>();
             services.AddSingleton<UnifiedTrackingMutator>();
             services.AddSingleton<AutoRestartService>();
+            services.AddSingleton<CrashReportService>();
             services.AddTransient<GithubService>();
 
             // Views and ViewModels
@@ -178,11 +203,25 @@ public partial class App : Application
         });
         Current.UnhandledException += ExceptionHandler;
 
+        // Current.UnhandledException only covers exceptions reaching the UI thread.
+        // Background threads and faulted tasks bypass it entirely, and those are exactly
+        // where tracking code runs - so hook them too or their crashes go unexplained.
+        AppDomain.CurrentDomain.UnhandledException += (_, e) =>
+            CrashReporter?.ReportException(e.ExceptionObject as Exception, "AppDomain.UnhandledException");
+        TaskScheduler.UnobservedTaskException += (_, e) =>
+        {
+            CrashReporter?.ReportException(e.Exception, "TaskScheduler.UnobservedTaskException");
+            e.SetObserved(); // already recorded; don't tear the process down for it
+        };
+
         // Kill any other instances of VRCFaceTracking.exe and our module processes
         Core.Utils.KillAllProcessesOfName("VRCFaceTracking");
         Core.Utils.KillAllProcessesOfName("VRCFaceTracking.ModuleProcess");
 
         await StartCrashWatchdogAsync();
+
+        // Now that logging is live, explain any previous session that died silently
+        CrashReporter?.ReportPreviousRunIfCrashed();
 
         await App.GetService<IActivationService>().ActivateAsync(args);
         await Host.StartAsync();
@@ -239,6 +278,11 @@ public partial class App : Application
     {
         // We need to hold the reference, because the Exception property is cleared when accessed.
         var exception = e.Exception;
+
+        // Write our own report first: Sentry needs the network and the user needs a file
+        // on disk they can actually read and send on.
+        CrashReporter?.ReportException(exception, "Application.UnhandledException");
+
         if (exception != null)
         {
             // Tells Sentry this was an Unhandled Exception
