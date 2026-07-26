@@ -72,28 +72,59 @@ ICO_SIZES = [16, 24, 32, 48, 64, 128, 256]
 # ---------------------------------------------------------------- conversion
 
 
+def _lum(r: int, g: int, b: int) -> float:
+    return 0.299 * r + 0.587 * g + 0.114 * b
+
+
 def _family(r: int, g: int, b: int) -> str:
-    """Which colour family a source pixel belongs to."""
+    """Which colour family a source pixel belongs to (diagnostics / sanity check)."""
     spread = max(r, g, b) - min(r, g, b)
-    lum = 0.299 * r + 0.587 * g + 0.114 * b
     if g - r > 40 and g - b > 80:
         return "green"
     if min(r, g, b) > 200 and spread < 30:
         return "white"
-    if lum < 60:
+    if _lum(r, g, b) < 60:
         return "black"
     if r - g > 40:
         return "pink"
     return "grey"
 
 
-def convert_glyph(source: QImage, invert_left: bool) -> QImage:
+def _is_green(r: int, g: int, b: int) -> bool:
+    """The lens and LED bars."""
+    return g - r > 40 and g - b > 80
+
+
+def _machine_is_background(r: int, g: int, b: int) -> bool:
+    """The machine half's flat grey backdrop (neutral, rgb ~120-156).
+
+    Defined as "is this the backdrop" rather than "is this a feature" on
+    purpose: anti-aliased blends between the lens and the gloss dots land in no
+    obvious colour family, and treating those as background punched visible
+    holes through the glyph.
+    """
+    spread = max(r, g, b) - min(r, g, b)
+    return spread < 25 and 100 < _lum(r, g, b) < 172
+
+
+def _avatar_is_background(r: int, g: int, b: int) -> bool:
+    """The avatar half's pink backdrop, including the darker nose nub."""
+    return r - g > 30
+
+
+def convert_glyph(source: QImage, invert_left: bool, simple: bool = True) -> QImage:
     """Map the coloured artwork onto a black/white/transparent glyph.
 
     With invert_left the machine half is rendered for placement on a black
-    background: its features come out white and the lens gloss dots black, so
-    the two halves of the icon read as photo negatives of each other - which is
-    how the original's grey|pink split translates into pure black and white.
+    background: its features come out white, so the two halves of the icon read
+    as photo negatives of each other - which is how the original's grey|pink
+    split translates into pure black and white.
+
+    In simple mode (the default) every feature on a side collapses to that
+    side's single colour: the lens gloss dots melt into a solid lens and the
+    pupil into a solid eye. Note they have to be actively painted over rather
+    than skipped - leaving them unpainted would make them transparent and the
+    background would show through as holes anyway.
     """
     width, height = source.width(), source.height()
     split_x = width / 2.0  # the grey|pink boundary sits on the centre line
@@ -112,18 +143,22 @@ def convert_glyph(source: QImage, invert_left: bool) -> QImage:
             fam = _family(c.red(), c.green(), c.blue())
             counts[fam] += 1
 
+            r, g, b = c.red(), c.green(), c.blue()
+
             if x < split_x:
-                # machine side: lens + LED bars, gloss dots on top of them
-                if fam == "green":
-                    out.setPixelColor(x, y, WHITE if invert_left else BLACK)
-                elif fam == "white":
-                    out.setPixelColor(x, y, BLACK if invert_left else WHITE)
+                # machine side: the lens and LED bars, with gloss dots on top
+                if _machine_is_background(r, g, b):
+                    continue
+                base = WHITE if invert_left else BLACK
+                detail = BLACK if invert_left else WHITE
+                keep = simple or _is_green(r, g, b)
+                out.setPixelColor(x, y, base if keep else detail)
             else:
-                # avatar side
-                if fam == "white":
-                    out.setPixelColor(x, y, BLACK)  # eye + smile
-                elif fam == "black":
-                    out.setPixelColor(x, y, WHITE)  # pupil, cut out of the eye
+                # avatar side: the eye and smile, with the pupil inside the eye
+                if _avatar_is_background(r, g, b):
+                    continue
+                is_pupil = _lum(r, g, b) < 100
+                out.setPixelColor(x, y, WHITE if (is_pupil and not simple) else BLACK)
 
     if counts["green"] == 0 or counts["pink"] == 0:
         raise SystemExit(
@@ -344,6 +379,8 @@ def main() -> None:
                         help="glyph size as a fraction of the icon (default 0.62)")
     parser.add_argument("--no-split", action="store_true",
                         help="don't invert the machine half; put both halves on white")
+    parser.add_argument("--details", action="store_true",
+                        help="keep the lens gloss dots and the eye's pupil")
     parser.add_argument("--preview", metavar="DIR",
                         help="only write preview PNGs here")
     args = parser.parse_args()
@@ -357,23 +394,25 @@ def main() -> None:
     if source.isNull():
         raise SystemExit(f"could not read {SOURCE}")
 
+    simple = not args.details
+
     if args.preview:
         out = Path(args.preview)
         out.mkdir(parents=True, exist_ok=True)
         for split in (True, False):
             tag = "split" if split else "plain"
-            glyph = crop_about_split(convert_glyph(source, invert_left=split))
+            glyph = crop_about_split(convert_glyph(source, invert_left=split, simple=simple))
             contact_sheet(glyph, args.scale, split).save(str(out / f"preview-{tag}.png"), "PNG")
             draw(512, glyph, args.scale, split).save(str(out / f"icon-{tag}-512.png"), "PNG")
-        print(f"previews written to {out}")
+        print(f"previews written to {out} (simple={simple})")
         return
 
     split = not args.no_split
-    glyph = crop_about_split(convert_glyph(source, invert_left=split))
+    glyph = crop_about_split(convert_glyph(source, invert_left=split, simple=simple))
     print(f"converted glyph: {glyph.width()}x{glyph.height()} from {SOURCE.name}")
 
     written = write_assets(glyph, args.scale, split)
-    print(f"wrote {len(written)} files (scale={args.scale}, split={split})")
+    print(f"wrote {len(written)} files (scale={args.scale}, split={split}, simple={simple})")
     print(f"  {written[0]}")
     print(f"  {written[1]}")
 
