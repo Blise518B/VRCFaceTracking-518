@@ -135,12 +135,73 @@
             </Border>
         </DataTemplate>
 
+        <DataTemplate x:Key="ExpressionRowTemplate">
+            <Border Background="#08ffffff"
+                    CornerRadius="2"
+                    Padding="20,6,20,6"
+                    Margin="0,1,0,1">
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="3*" MinWidth="140"/>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="Auto" MinWidth="40"/>
+                        <ColumnDefinition Width="4*" MinWidth="120"/>
+                        <ColumnDefinition Width="Auto" MinWidth="40"/>
+                        <ColumnDefinition Width="2*" MinWidth="80"/>
+                        <ColumnDefinition Width="Auto" MinWidth="40"/>
+                    </Grid.ColumnDefinitions>
+                    <TextBlock Text="{Binding Name}"
+                               TextWrapping="Wrap"
+                               VerticalAlignment="Center"
+                               Margin="0,0,10,0"/>
+                    <CheckBox IsChecked="{Binding Enabled, Mode=TwoWay}"
+                              MinWidth="0"
+                              Padding="0"
+                              Margin="0,0,10,0"
+                              VerticalAlignment="Center"
+                              Grid.Column="1"
+                              ToolTipService.ToolTip="Apply range remapping to this expression"/>
+                    <TextBlock Text="{Binding FloorText}"
+                               TextAlignment="Right"
+                               VerticalAlignment="Center"
+                               Margin="0,0,8,0"
+                               Grid.Column="2"/>
+                    <toolkit:RangeSelector Minimum="0"
+                                           Maximum="1"
+                                           RangeStart="{Binding Floor, Mode=TwoWay}"
+                                           RangeEnd="{Binding Ceil, Mode=TwoWay}"
+                                           StepFrequency="0.01"
+                                           IsEnabled="{Binding Enabled}"
+                                           Grid.Column="3"
+                                           ToolTipService.ToolTip="Raw tracking range that maps to 0..1 output"/>
+                    <TextBlock Text="{Binding CeilText}"
+                               VerticalAlignment="Center"
+                               Margin="8,0,12,0"
+                               Grid.Column="4"/>
+                    <Slider Minimum="0.25"
+                            Maximum="4"
+                            StepFrequency="0.05"
+                            TickPlacement="None"
+                            Value="{Binding Curve, Mode=TwoWay}"
+                            IsEnabled="{Binding Enabled}"
+                            VerticalAlignment="Center"
+                            Grid.Column="5"
+                            ToolTipService.ToolTip="Sensitivity curve: below 1 reacts stronger to small movements, above 1 requires bigger movements"/>
+                    <TextBlock Text="{Binding CurveText}"
+                               VerticalAlignment="Center"
+                               Margin="8,0,0,0"
+                               Grid.Column="6"/>
+                </Grid>
+            </Border>
+        </DataTemplate>
+
         <helpers:ComponentTemplateSelector x:Key="MutationPropertyTemplateSelector"
                                           CheckboxTemplate="{StaticResource CheckboxTemplate}"
                                           TextInputTemplate="{StaticResource TextInputTemplate}"
                                           ButtonTemplate="{StaticResource ButtonTemplate}"
                                           RangeTemplate="{StaticResource RangeTemplate}"
-                                          SliderTemplate="{StaticResource SliderTemplate}"/>
+                                          SliderTemplate="{StaticResource SliderTemplate}"
+                                          ExpressionRowTemplate="{StaticResource ExpressionRowTemplate}"/>
     </Page.Resources>
 
     <!-- Main Content -->

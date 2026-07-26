@@ -38,7 +38,7 @@ public abstract partial class TrackingMutation
     public ILocalSettingsService LocalSettingsService { get; set; }
     public virtual void Initialize(UnifiedTrackingData data) { }
     public abstract void MutateData(ref UnifiedTrackingData data);
-    public void CreateProperties() => Components = MutationComponentFactory.CreateComponents(this);
+    public virtual void CreateProperties() => Components = MutationComponentFactory.CreateComponents(this);
     public static TrackingMutation[] GetImplementingMutations(bool ordered = true)
     {
         var types = Assembly.GetExecutingAssembly()

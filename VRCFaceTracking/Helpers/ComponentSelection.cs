@@ -17,6 +17,7 @@ public class ComponentTemplateSelector : DataTemplateSelector
     public DataTemplate SliderTemplate { get; set; }
     public DataTemplate ButtonTemplate { get; set; }
     public DataTemplate RangeTemplate { get; set; }
+    public DataTemplate ExpressionRowTemplate { get; set; }
 
     protected override DataTemplate SelectTemplateCore(object item, DependencyObject container)
     {
@@ -30,6 +31,8 @@ public class ComponentTemplateSelector : DataTemplateSelector
             };
         if (item is MutationRangeProperty)
             return RangeTemplate;
+        if (item is MutationExpressionRow)
+            return ExpressionRowTemplate;
         if (item is MutationAction)
             return ButtonTemplate;
 
