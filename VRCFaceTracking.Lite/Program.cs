@@ -394,6 +394,12 @@ public static class Program
                            new Seg(" msg/s   port ", Dim), new Seg(oscTarget.InPort.ToString(), Body)));
             lines.Add(Line(new Seg("    out ", Dim), new Seg($"{_outPerSec,5}", outColor),
                            new Seg(" msg/s   port ", Dim), new Seg(oscTarget.OutPort.ToString(), Body)));
+            // The router has no window of its own, so its state is worth stating here
+            var routerLinked = routerClient.LinkStatus.StartsWith("connected", StringComparison.Ordinal);
+            lines.Add(Line(new Seg("    router 518  ", Dim),
+                new Seg(routerClient.LinkStatus, routerClient.Enabled
+                    ? routerLinked ? Value : Note
+                    : Dim)));
             lines.Add(Blank);
             var statusVisible = DateTime.Now < _statusUntil && _status.Length > 0;
             lines.Add(statusVisible

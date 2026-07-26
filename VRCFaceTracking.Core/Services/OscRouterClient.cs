@@ -34,9 +34,18 @@ public partial class OscRouterClient : ObservableObject
     [property: SavedSetting("UseOscRouter518", true)]
     private bool _enabled = true;
 
+    /// <summary>
+    /// Plain-language link state, shown in Settings and the lite monitor. The router
+    /// normally runs headless (no window at all), so "is it running?" is otherwise
+    /// only answerable via Task Manager.
+    /// </summary>
+    [ObservableProperty] private string _linkStatus = "checking...";
+
     private readonly ILogger<OscRouterClient> _logger;
     private readonly ILocalSettingsService _settingsService;
     private readonly OscRecvService _recvService;
+    private readonly IDispatcherService _dispatcherService;
+    private DateTime _lastReplyUtc = DateTime.MinValue;
 
     private Socket? _socket;
     private CancellationTokenSource? _cts;
@@ -47,11 +56,13 @@ public partial class OscRouterClient : ObservableObject
     public OscRouterClient(
         ILogger<OscRouterClient> logger,
         ILocalSettingsService settingsService,
-        OscRecvService recvService)
+        OscRecvService recvService,
+        IDispatcherService dispatcherService)
     {
         _logger = logger;
         _settingsService = settingsService;
         _recvService = recvService;
+        _dispatcherService = dispatcherService;
 
         PropertyChanged += (_, _) =>
         {
@@ -76,6 +87,25 @@ public partial class OscRouterClient : ObservableObject
         else
         {
             StopListening();
+            SetStatus("off - using VRChat's own discovery only");
+        }
+    }
+
+    /// <summary>Property changes must reach the UI thread in the full app.</summary>
+    private void SetStatus(string text)
+    {
+        if (LinkStatus == text)
+        {
+            return;
+        }
+
+        try
+        {
+            _dispatcherService.Run(() => LinkStatus = text);
+        }
+        catch (Exception)
+        {
+            LinkStatus = text; // No dispatcher (headless): set it directly
         }
     }
 
@@ -159,6 +189,16 @@ public partial class OscRouterClient : ObservableObject
                 // Router not running - that's fine, we're the fallback, not the main path
             }
 
+            // The router acks every subscribe, so a recent reply is proof it's alive.
+            // Three missed keep-alives (60s) before calling it gone, so a momentarily
+            // busy router doesn't flap the display.
+            var since = DateTime.UtcNow - _lastReplyUtc;
+            SetStatus(since < TimeSpan.FromSeconds(60)
+                ? $"connected on port {localPort} (router is running)"
+                : _lastReplyUtc == DateTime.MinValue
+                    ? "no router found - start OSC Router 518 to enable the fallback"
+                    : $"lost contact {(int)since.TotalSeconds}s ago - is the router still running?");
+
             try
             {
                 await Task.Delay(KeepAliveInterval, token);
@@ -183,10 +223,13 @@ public partial class OscRouterClient : ObservableObject
                     continue;
                 }
 
-                // Router control replies (/router518/ok etc.) are not tracking data
+                // Router control replies (/router518/ok etc.) are not tracking data, but
+                // they ARE the liveness signal: only a running router sends them.
                 if (received > ControlPrefix.Length && buffer.AsSpan(0, ControlPrefix.Length)
                         .SequenceEqual(ControlPrefix))
                 {
+                    _lastReplyUtc = DateTime.UtcNow;
+                    SetStatus($"connected on port {((IPEndPoint)_socket!.LocalEndPoint!).Port} (router is running)");
                     continue;
                 }
 

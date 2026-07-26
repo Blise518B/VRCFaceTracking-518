@@ -95,7 +95,16 @@
                     <labs:SettingsCard.HeaderIcon>
                         <FontIcon Glyph="&#xE968;" Foreground="{StaticResource Cat518Green}" />
                     </labs:SettingsCard.HeaderIcon>
-                    <ToggleSwitch IsOn="{x:Bind ViewModel.RouterClient.Enabled, Mode=TwoWay}"/>
+                    <StackPanel Orientation="Horizontal" Spacing="12" VerticalAlignment="Center">
+                        <!-- The router runs headless, so this line is the only place you can
+                             see whether it's actually up without opening Task Manager. -->
+                        <TextBlock Text="{x:Bind ViewModel.RouterClient.LinkStatus, Mode=OneWay}"
+                                   VerticalAlignment="Center"
+                                   FontFamily="Consolas"
+                                   FontSize="12"
+                                   Foreground="{StaticResource Cat518Cyan}"/>
+                        <ToggleSwitch IsOn="{x:Bind ViewModel.RouterClient.Enabled, Mode=TwoWay}"/>
+                    </StackPanel>
                 </labs:SettingsCard>
 
                 <labs:SettingsCard Header="SteamVR auto-launch starts"
