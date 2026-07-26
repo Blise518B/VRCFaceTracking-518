@@ -32,6 +32,7 @@ public class UnifiedLibManager : ILibManager
 
     private List<Assembly> AvailableModules { get; set; }
     private readonly List<ModuleRuntimeInfo> _moduleThreads = new();
+    private readonly object _moduleThreadsLock = new();
     private readonly IModuleDataService _moduleDataService;
 
     private string _sandboxProcessPath { get; set; }
@@ -42,7 +43,16 @@ public class UnifiedLibManager : ILibManager
     private Thread _initializeWorker;
     private static VrcftSandboxServer _sandboxServer;
     #endregion
-    
+
+    #region Module crash supervision
+    private Thread _supervisorThread;
+    private volatile bool _suppressAutoRestart;
+    private readonly Dictionary<string, List<DateTime>> _restartHistory = new();
+    private const int MaxRestartsInWindow = 5;
+    private static readonly TimeSpan RestartWindow = TimeSpan.FromMinutes(5);
+    private const int SupervisorPollIntervalMs = 2000;
+    #endregion
+
     public UnifiedLibManager(ILoggerFactory factory, IDispatcherService dispatcherService, IModuleDataService moduleDataService)
     {
         _loggerFactory = factory;
@@ -60,6 +70,164 @@ public class UnifiedLibManager : ILibManager
         }
 
         // @TODO: Kill any lingering sub-modules to eliminate any conflicts
+
+        StartModuleSupervisor();
+    }
+
+    /// <summary>
+    /// Starts a background thread that watches for sandbox module processes dying unexpectedly
+    /// and respawns them, so a single crashing module doesn't silently kill tracking.
+    /// </summary>
+    private void StartModuleSupervisor()
+    {
+        _supervisorThread = new Thread(() =>
+        {
+            while ( true )
+            {
+                Thread.Sleep(SupervisorPollIntervalMs);
+                try
+                {
+                    SuperviseModules();
+                }
+                catch ( Exception e )
+                {
+                    _logger.LogError("Module supervisor error: {message}", e.Message);
+                }
+            }
+        });
+        _supervisorThread.IsBackground = true;
+        _supervisorThread.Name = "ModuleCrashSupervisor";
+        _supervisorThread.Start();
+    }
+
+    private void SuperviseModules()
+    {
+        if ( _suppressAutoRestart )
+        {
+            return;
+        }
+
+        List<ModuleRuntimeInfo> deadModules = null;
+        lock ( AvailableSandboxModules )
+        {
+            foreach ( var module in AvailableSandboxModules )
+            {
+                bool hasExited;
+                try
+                {
+                    hasExited = module.Process?.HasExited ?? false;
+                }
+                catch ( Exception )
+                {
+                    // Process handle may be inaccessible (e.g. elevated process); leave it alone
+                    continue;
+                }
+
+                if ( module.IsActive && hasExited )
+                {
+                    ( deadModules ??= new() ).Add(module);
+                }
+            }
+
+            if ( deadModules == null )
+            {
+                return;
+            }
+
+            foreach ( var module in deadModules )
+            {
+                AvailableSandboxModules.Remove(module);
+            }
+        }
+
+        foreach ( var dead in deadModules )
+        {
+            if ( _suppressAutoRestart )
+            {
+                return;
+            }
+            HandleDeadModule(dead);
+        }
+    }
+
+    private void HandleDeadModule(ModuleRuntimeInfo module)
+    {
+        var moduleName = module.ModuleInformation?.Name ?? module.ModuleClassName ?? "Unknown";
+        var exitCode = 0;
+        try
+        {
+            exitCode = module.Process?.ExitCode ?? 0;
+        }
+        catch ( Exception ) { }
+
+        // Stop the update pump that was feeding the dead process
+        module.UpdateCancellationToken?.Cancel();
+        lock ( _moduleThreadsLock )
+        {
+            _moduleThreads.Remove(module);
+        }
+
+        // Free up the eye/expression slots the dead module was occupying so a
+        // respawned instance (or another module) can claim them again
+        if ( module.ModuleInformation?.UsingEye ?? false )
+        {
+            EyeStatus = ModuleState.Uninitialized;
+        }
+        if ( module.ModuleInformation?.UsingExpression ?? false )
+        {
+            ExpressionStatus = ModuleState.Uninitialized;
+        }
+
+        if ( exitCode == 0 )
+        {
+            // Graceful self-exit (e.g. failed init) - don't resurrect
+            _logger.LogInformation("Module {module} (PID {pid}) exited cleanly. Not restarting it.", moduleName, module.SandboxProcessPID);
+            return;
+        }
+
+        _logger.LogWarning("Module {module} (PID {pid}) died unexpectedly with exit code {code}.", moduleName, module.SandboxProcessPID, exitCode);
+
+        if ( !CanRestart(module.SandboxModulePath) )
+        {
+            _logger.LogError("Module {module} crashed {count} times within {window} minutes. Giving up on restarting it.",
+                moduleName, MaxRestartsInWindow, RestartWindow.TotalMinutes);
+            if ( module.ModuleInformation != null )
+            {
+                _dispatcherService.Run(() => module.ModuleInformation.Active = false);
+            }
+            return;
+        }
+
+        _logger.LogInformation("Restarting module {module}...", moduleName);
+        InitialiseSandboxesBaseOnPaths(new[] { module.SandboxModulePath });
+    }
+
+    private bool CanRestart(string modulePath)
+    {
+        if ( string.IsNullOrEmpty(modulePath) || !File.Exists(modulePath) )
+        {
+            return false;
+        }
+
+        lock ( _restartHistory )
+        {
+            if ( !_restartHistory.TryGetValue(modulePath, out var history) )
+            {
+                history = new List<DateTime>();
+                _restartHistory[modulePath] = history;
+            }
+
+            var cutoff = DateTime.UtcNow - RestartWindow;
+            history.RemoveAll(t => t < cutoff);
+
+            if ( history.Count >= MaxRestartsInWindow )
+            {
+                return false;
+            }
+
+            history.Add(DateTime.UtcNow);
+            return true;
+        }
     }
 
     public void Initialize()
@@ -386,12 +554,15 @@ public class UnifiedLibManager : ILibManager
     
     private void EnsureModuleThreadStartedSandboxed(ModuleRuntimeInfo module)
     {
-        if (_moduleThreads.Any(pair =>
-            ( pair.SandboxProcessPID    == module.SandboxProcessPID ) &&
-            ( pair.SandboxProcessPort   == module.SandboxProcessPort )
-        ))
+        lock ( _moduleThreadsLock )
         {
-            return;
+            if (_moduleThreads.Any(pair =>
+                ( pair.SandboxProcessPID    == module.SandboxProcessPID ) &&
+                ( pair.SandboxProcessPort   == module.SandboxProcessPort )
+            ))
+            {
+                return;
+            }
         }
 
         int port = module.SandboxProcessPort;
@@ -412,7 +583,10 @@ public class UnifiedLibManager : ILibManager
         module.UpdateCancellationToken = cts;
         module.UpdateThread = thread;
 
-        _moduleThreads.Add(module);
+        lock ( _moduleThreadsLock )
+        {
+            _moduleThreads.Add(module);
+        }
     }
 
     private void AttemptSandboxedModuleInitialize(ModuleRuntimeInfo module)
@@ -502,7 +676,31 @@ public class UnifiedLibManager : ILibManager
     {
         _logger.LogInformation("Tearing down all modules...");
 
-        foreach ( var module in _moduleThreads )
+        // Intentional teardown - the crash supervisor must not resurrect these processes
+        _suppressAutoRestart = true;
+        try
+        {
+            TeardownAllAndResetCore();
+        }
+        finally
+        {
+            lock ( _restartHistory )
+            {
+                _restartHistory.Clear();
+            }
+            _suppressAutoRestart = false;
+        }
+    }
+
+    private void TeardownAllAndResetCore()
+    {
+        List<ModuleRuntimeInfo> moduleThreadsSnapshot;
+        lock ( _moduleThreadsLock )
+        {
+            moduleThreadsSnapshot = _moduleThreads.ToList();
+        }
+
+        foreach ( var module in moduleThreadsSnapshot )
         {
             var success = false;
             if (module == null || (module.Process?.HasExited ?? true))
@@ -520,7 +718,10 @@ public class UnifiedLibManager : ILibManager
             }
         }
 
-        _moduleThreads.Clear();
+        lock ( _moduleThreadsLock )
+        {
+            _moduleThreads.Clear();
+        }
 
         foreach ( var module in AvailableSandboxModules )
         {
