@@ -89,6 +89,19 @@
                     </labs:SettingsCard.HeaderIcon>
                     <ToggleSwitch IsOn="{x:Bind ViewModel.AutoStart, Mode=TwoWay}"/>
                 </labs:SettingsCard>
+
+                <labs:SettingsCard Header="SteamVR auto-launch starts"
+                                   Description="The lite monitor is one small screen and uses far less memory. Both share the same settings, so curves tuned here apply either way (518 fork feature)">
+                    <labs:SettingsCard.HeaderIcon>
+                        <FontIcon Glyph="&#xE7F4;" Foreground="{StaticResource Cat518Cyan}" />
+                    </labs:SettingsCard.HeaderIcon>
+                    <ComboBox x:Name="LaunchModeCombo"
+                              MinWidth="190"
+                              SelectionChanged="LaunchModeCombo_SelectionChanged">
+                        <ComboBoxItem Content="The full app"/>
+                        <ComboBoxItem Content="The lite monitor"/>
+                    </ComboBox>
+                </labs:SettingsCard>
                 
                 <labs:SettingsExpander Header="Crash Auto-Restart"
                                        Description="Automatically restart crashed tracking modules and relaunch VRCFaceTracking if it crashes (518 fork feature)">

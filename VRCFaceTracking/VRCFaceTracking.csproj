@@ -76,6 +76,7 @@
     <ProjectReference Include="..\VRCFaceTracking.Core\VRCFaceTracking.Core.csproj" />
     <ProjectReference Include="..\VRCFaceTracking.ModuleProcess\VRCFaceTracking.ModuleProcess.csproj" />
     <ProjectReference Include="..\VRCFaceTracking.Watchdog\VRCFaceTracking.Watchdog.csproj" />
+    <ProjectReference Include="..\VRCFaceTracking.Lite\VRCFaceTracking.Lite.csproj" />
   </ItemGroup>
   <ItemGroup>
     <Content Update="Assets\WindowIcon.ico">
@@ -101,5 +102,7 @@
   <Target Name="CopyToMainProject" AfterTargets="Build">
     <Copy SourceFiles="$(OutputPath)VRCFaceTracking.ModuleProcess.exe" DestinationFolder="..\VRCFaceTracking\bin\$(Platform)\$(Configuration)\$(TargetFramework)\win-$(Platform)\" SkipUnchangedFiles="true" />
     <Copy SourceFiles="$(OutputPath)VRCFaceTracking.Watchdog.exe" DestinationFolder="..\VRCFaceTracking\bin\$(Platform)\$(Configuration)\$(TargetFramework)\win-$(Platform)\" SkipUnchangedFiles="true" Condition="Exists('$(OutputPath)VRCFaceTracking.Watchdog.exe')" />
+    <!-- SteamVR's manifest points at the lite exe, so it must sit next to the full app -->
+    <Copy SourceFiles="$(OutputPath)VRCFaceTracking.Lite.exe" DestinationFolder="..\VRCFaceTracking\bin\$(Platform)\$(Configuration)\$(TargetFramework)\win-$(Platform)\" SkipUnchangedFiles="true" Condition="Exists('$(OutputPath)VRCFaceTracking.Lite.exe')" />
   </Target>
 </Project>

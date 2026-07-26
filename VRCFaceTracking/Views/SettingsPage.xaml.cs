@@ -21,6 +21,22 @@ public sealed partial class SettingsPage : Page, INotifyPropertyChanged
 
     private void ResetRestartStats_OnClick(object sender, RoutedEventArgs e) => ViewModel.AutoRestart.ResetStats();
 
+    private bool _launchModeReady;
+
+    /// <summary>
+    /// SteamVR launches one binary (the lite exe), which hands over to the full app when this
+    /// is set to Full. Writing the preference is all that's needed - no manifest changes.
+    /// </summary>
+    private void LaunchModeCombo_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (!_launchModeReady)
+        {
+            return;
+        }
+
+        LaunchMode.Write(LaunchModeCombo.SelectedIndex == 1 ? AppLaunchMode.Lite : AppLaunchMode.Full);
+    }
+
     public string LastCrashText =>
         ViewModel.CrashReports.LastCrashSummary ?? "Nothing recorded in this session.";
 
@@ -186,6 +202,10 @@ public sealed partial class SettingsPage : Page, INotifyPropertyChanged
             case ElementTheme.Default:
                 themeMode.SelectedIndex = 2; break;
         }
+
+        // Set before arming the handler, so restoring the saved value isn't treated as an edit
+        LaunchModeCombo.SelectedIndex = LaunchMode.Read() == AppLaunchMode.Lite ? 1 : 0;
+        _launchModeReady = true;
     }
 
     private async void bugRequestCard_Click(object sender, RoutedEventArgs e)

@@ -4,13 +4,13 @@
 		{
 			"app_key": "blise518b.vrcft",
 			"launch_type": "binary",
-			"binary_path_windows": "VRCFaceTracking.exe",
+			"binary_path_windows": "VRCFaceTracking.Lite.exe",
 			"is_dashboard_overlay": true,
 
 			"strings": {
 				"en_us": {
 					"name": "VRCFaceTracking - Blise518B Edition",
-					"description": "VRCFaceTracking (Blise518B Edition) provides a bridge between facial tracking hardware and VRChat."
+					"description": "VRCFaceTracking (Blise518B Edition) provides a bridge between facial tracking hardware and VRChat. Launches the lite monitor or the full app depending on your setting."
 				}
 			}
 		}
