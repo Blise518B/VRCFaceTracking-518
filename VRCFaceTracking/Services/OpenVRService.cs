@@ -6,6 +6,11 @@ namespace VRCFaceTracking.Services;
 
 public class OpenVRService
 {
+    // This fork registers under its own app key so SteamVR auto-launches THIS edition,
+    // not a stock VRCFaceTracking install that may also be registered on the system.
+    private const string AppKey = "blise518b.vrcft";
+    private const string StockAppKey = "benaclejames.vrcft";
+
     private CVRSystem _system;
     private readonly ILogger<OpenVRService> _logger;
     
@@ -55,7 +60,7 @@ public class OpenVRService
 
     public bool AutoStart
     {
-        get => IsInitialized && OpenVR.Applications.GetApplicationAutoLaunch("benaclejames.vrcft");
+        get => IsInitialized && OpenVR.Applications.GetApplicationAutoLaunch(AppKey);
         set
         {
             if (!IsInitialized && !Initialize())
@@ -64,10 +69,28 @@ public class OpenVRService
                 return;
             }
 
-            var setAutoLaunchResult = OpenVR.Applications.SetApplicationAutoLaunch("benaclejames.vrcft", value);
+            var setAutoLaunchResult = OpenVR.Applications.SetApplicationAutoLaunch(AppKey, value);
             if (setAutoLaunchResult != EVRApplicationError.None)
             {
                 _logger.LogError("Failed to set auto launch: {0}", setAutoLaunchResult);
+            }
+
+            // If a stock VRCFaceTracking install also has auto-launch enabled, both versions
+            // would start with SteamVR and fight each other - silence the stock one.
+            if (value)
+            {
+                try
+                {
+                    if (OpenVR.Applications.GetApplicationAutoLaunch(StockAppKey))
+                    {
+                        OpenVR.Applications.SetApplicationAutoLaunch(StockAppKey, false);
+                        _logger.LogInformation("Disabled auto-launch of the stock VRCFaceTracking so only this edition starts with SteamVR.");
+                    }
+                }
+                catch (Exception e)
+                {
+                    _logger.LogWarning("Could not check/disable stock VRCFaceTracking auto-launch: {0}", e.Message);
+                }
             }
         }
     }
