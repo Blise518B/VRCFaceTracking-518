@@ -90,6 +90,50 @@
                     <ToggleSwitch IsOn="{x:Bind ViewModel.AutoStart, Mode=TwoWay}"/>
                 </labs:SettingsCard>
                 
+                <labs:SettingsExpander Header="Crash Auto-Restart"
+                                       Description="Automatically restart crashed tracking modules and relaunch VRCFaceTracking if it crashes (518 fork feature)">
+                    <labs:SettingsExpander.HeaderIcon>
+                        <FontIcon Glyph="&#xE72C;" />
+                    </labs:SettingsExpander.HeaderIcon>
+                    <ToggleSwitch IsOn="{x:Bind ViewModel.AutoRestart.Enabled, Mode=TwoWay}"/>
+                    <labs:SettingsExpander.Items>
+                        <labs:SettingsCard Header="Module restarts"
+                                           Description="How many times a crashed tracking module was automatically restarted">
+                            <TextBlock Text="{x:Bind ViewModel.AutoRestart.ModuleRestartCount, Mode=OneWay}"
+                                       Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
+                        </labs:SettingsCard>
+                        <labs:SettingsCard Header="App relaunches"
+                                           Description="How many times VRCFaceTracking was automatically relaunched after a crash">
+                            <TextBlock Text="{x:Bind ViewModel.AutoRestart.AppRelaunchCount, Mode=OneWay}"
+                                       Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
+                        </labs:SettingsCard>
+                        <labs:SettingsCard Header="Recent restarts"
+                                           HorizontalContentAlignment="Stretch"
+                                           ContentAlignment="Vertical">
+                            <StackPanel>
+                                <TextBlock Text="No restarts recorded - everything has been stable."
+                                           Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                           Visibility="{x:Bind HasNoRestartEvents, Mode=OneWay}"/>
+                                <ItemsControl ItemsSource="{x:Bind ViewModel.AutoRestart.RecentEvents, Mode=OneWay}">
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate x:DataType="x:String">
+                                            <TextBlock Text="{x:Bind}"
+                                                       FontFamily="Consolas"
+                                                       Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                                       TextWrapping="Wrap"
+                                                       Margin="0,1,0,1"/>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+                            </StackPanel>
+                        </labs:SettingsCard>
+                        <labs:SettingsCard Header="Reset statistics"
+                                           Description="Clears both counters and the restart log">
+                            <Button Content="Reset" Click="ResetRestartStats_OnClick"/>
+                        </labs:SettingsCard>
+                    </labs:SettingsExpander.Items>
+                </labs:SettingsExpander>
+
                 <labs:SettingsExpander x:Uid="RiskySettings">
                     <labs:SettingsExpander.HeaderIcon>
                         <FontIcon Glyph="&#xE7BA;" />

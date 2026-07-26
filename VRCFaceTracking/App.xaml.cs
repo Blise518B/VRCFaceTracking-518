@@ -118,6 +118,7 @@ public partial class App : Application
             services.AddSingleton<OscRecvService>();
             services.AddSingleton<ParameterSenderService>();
             services.AddSingleton<UnifiedTrackingMutator>();
+            services.AddSingleton<AutoRestartService>();
             services.AddTransient<GithubService>();
 
             // Views and ViewModels
@@ -178,34 +179,24 @@ public partial class App : Application
         Core.Utils.KillAllProcessesOfName("VRCFaceTracking");
         Core.Utils.KillAllProcessesOfName("VRCFaceTracking.ModuleProcess");
 
-        StartCrashWatchdog();
+        await StartCrashWatchdogAsync();
 
         await App.GetService<IActivationService>().ActivateAsync(args);
         await Host.StartAsync();
     }
 
     /// <summary>
-    /// Spawns the companion watchdog process that relaunches VRCFaceTracking if it crashes.
-    /// The restart counter is threaded through relaunches so a crash loop caps out instead
-    /// of restarting forever.
+    /// Initializes the auto-restart service, records a relaunch if the watchdog brought us
+    /// back after a crash, and spawns a fresh watchdog for this instance (if enabled).
+    /// Any watchdog attached to an instance we just killed notices us running and exits
+    /// on its own, so it's safe to always spawn a fresh one for ourselves.
     /// </summary>
-    private void StartCrashWatchdog()
+    private async Task StartCrashWatchdogAsync()
     {
         try
         {
-            var watchdogPath = Path.Combine(AppContext.BaseDirectory, "VRCFaceTracking.Watchdog.exe");
-            if (!File.Exists(watchdogPath))
-            {
-                _logger?.LogWarning("Crash watchdog not found at {path}. Auto-relaunch is disabled.", watchdogPath);
-                return;
-            }
-
-            var exePath = Environment.ProcessPath;
-            if (string.IsNullOrEmpty(exePath))
-            {
-                _logger?.LogWarning("Could not determine own executable path. Auto-relaunch is disabled.");
-                return;
-            }
+            var autoRestart = App.GetService<AutoRestartService>();
+            await autoRestart.InitializeAsync();
 
             // If we were just relaunched by a watchdog, it passed us the consecutive restart count
             var restartCount = 0;
@@ -215,21 +206,24 @@ public partial class App : Application
                 if (cmdArgs[i] == "--restarted-count" && int.TryParse(cmdArgs[i + 1], out var parsed))
                 {
                     restartCount = parsed;
-                    _logger?.LogInformation("VRCFaceTracking was automatically relaunched after a crash (restart {count}).", parsed);
                     break;
                 }
             }
 
-            // Any watchdog attached to an instance we just killed notices us running and exits
-            // on its own, so it's safe to always spawn a fresh one for ourselves.
-            Process.Start(new ProcessStartInfo(watchdogPath)
+            if (restartCount > 0)
             {
-                Arguments = $"--watch-pid {Environment.ProcessId} --exe \"{exePath}\" --restart-count {restartCount}",
-                WorkingDirectory = AppContext.BaseDirectory,
-                CreateNoWindow = true,
-                WindowStyle = ProcessWindowStyle.Hidden,
-            });
-            _logger?.LogInformation("Crash watchdog started.");
+                _logger?.LogInformation("VRCFaceTracking was automatically relaunched after a crash (restart {count}).", restartCount);
+                autoRestart.RecordAppRelaunch(restartCount);
+            }
+
+            if (autoRestart.Enabled)
+            {
+                autoRestart.StartWatchdog(restartCount);
+            }
+            else
+            {
+                _logger?.LogInformation("Auto-restart is disabled in settings; crash watchdog not started.");
+            }
         }
         catch (Exception e)
         {

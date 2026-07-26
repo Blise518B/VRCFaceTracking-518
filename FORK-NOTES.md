@@ -40,6 +40,14 @@ waits for the app to exit:
 
 The watchdog logs every decision to `%APPDATA%\VRCFaceTracking\watchdog.log`.
 
+### Settings section
+
+Settings has a **Crash Auto-Restart** section (on by default) that controls both the module
+supervisor and the app watchdog. Turning it off kills the watchdog immediately and stops
+module resurrection; turning it on brings both back without a restart. The expander shows
+how many module restarts and app relaunches have happened, a timestamped log of the last
+50 restart events, and a reset button. Counters and the log persist across sessions.
+
 ## 3. Range Calibration
 
 `VRCFaceTracking.Core/Params/Data/Mutation/RangeCalibration.cs`, UI in `MutatorPage.xaml`

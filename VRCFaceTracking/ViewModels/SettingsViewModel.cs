@@ -6,6 +6,7 @@ using CommunityToolkit.Mvvm.Input;
 using Microsoft.UI.Xaml;
 
 using VRCFaceTracking.Contracts.Services;
+using VRCFaceTracking.Core.Services;
 using VRCFaceTracking.Models;
 using VRCFaceTracking.Services;
 
@@ -45,16 +46,22 @@ public partial class SettingsViewModel : ObservableRecipient
 
     public bool IsOpenVREnabled => OpenVRService.IsInitialized;
 
+    public AutoRestartService AutoRestart
+    {
+        get;
+    }
+
     private async void LoadContributors()
     {
         Contributors = await GithubService.GetContributors("benaclejames/VRCFaceTracking");
     }
 
-    public SettingsViewModel(IThemeSelectorService themeSelectorService, GithubService githubService, OpenVRService openVRService)
+    public SettingsViewModel(IThemeSelectorService themeSelectorService, GithubService githubService, OpenVRService openVRService, AutoRestartService autoRestartService)
     {
         _themeSelectorService = themeSelectorService;
         GithubService = githubService;
         OpenVRService = openVRService;
+        AutoRestart = autoRestartService;
 
         _elementTheme = _themeSelectorService.Theme;
 

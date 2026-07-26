@@ -1,4 +1,5 @@
-﻿using System.Runtime.InteropServices.WindowsRuntime;
+﻿using System.ComponentModel;
+using System.Runtime.InteropServices.WindowsRuntime;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 
@@ -11,8 +12,14 @@ using VrcftImage = VRCFaceTracking.Core.Types.Image;
 
 namespace VRCFaceTracking.Views;
 
-public sealed partial class SettingsPage : Page
+public sealed partial class SettingsPage : Page, INotifyPropertyChanged
 {
+    public event PropertyChangedEventHandler PropertyChanged;
+
+    public bool HasNoRestartEvents => ViewModel.AutoRestart.RecentEvents.Count == 0;
+
+    private void ResetRestartStats_OnClick(object sender, RoutedEventArgs e) => ViewModel.AutoRestart.ResetStats();
+
     public string Version
     {
         get
@@ -52,6 +59,9 @@ public sealed partial class SettingsPage : Page
         // Initialize hardware debug streams for upper and lower face tracking
         InitializeHardwareDebugStream(UnifiedTracking.EyeImageData, ref _upperImageStream, ref _upperStream);
         InitializeHardwareDebugStream(UnifiedTracking.LipImageData, ref _lowerImageStream, ref _lowerStream);
+
+        ViewModel.AutoRestart.RecentEvents.CollectionChanged += (_, _) =>
+            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(HasNoRestartEvents)));
 
         Loaded += OnPageLoaded;
         

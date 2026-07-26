@@ -6,6 +6,7 @@ using Microsoft.Extensions.Logging;
 using VRCFaceTracking.Core.Contracts.Services;
 using VRCFaceTracking.Core.Sandboxing;
 using VRCFaceTracking.Core.Sandboxing.IPC;
+using VRCFaceTracking.Core.Services;
 
 namespace VRCFaceTracking.Core.Library;
 
@@ -53,13 +54,16 @@ public class UnifiedLibManager : ILibManager
     private const int SupervisorPollIntervalMs = 2000;
     #endregion
 
-    public UnifiedLibManager(ILoggerFactory factory, IDispatcherService dispatcherService, IModuleDataService moduleDataService)
+    private readonly AutoRestartService _autoRestartService;
+
+    public UnifiedLibManager(ILoggerFactory factory, IDispatcherService dispatcherService, IModuleDataService moduleDataService, AutoRestartService autoRestartService)
     {
         _loggerFactory = factory;
         _logger = factory.CreateLogger<UnifiedLibManager>();
         _moduleLogger = factory.CreateLogger("\0VRCFT\0");
         _dispatcherService = dispatcherService;
         _moduleDataService = moduleDataService;
+        _autoRestartService = autoRestartService;
 
         LoadedModulesMetadata = new ObservableCollection<ModuleMetadataInternal>();
         _sandboxProcessPath = Path.GetFullPath(RuntimeInformation.IsOSPlatform(OSPlatform.Windows) ? "VRCFaceTracking.ModuleProcess.exe" : "VRCFaceTracking.ModuleProcess");
@@ -102,7 +106,7 @@ public class UnifiedLibManager : ILibManager
 
     private void SuperviseModules()
     {
-        if ( _suppressAutoRestart )
+        if ( _suppressAutoRestart || !( _autoRestartService?.Enabled ?? true ) )
         {
             return;
         }
@@ -199,6 +203,7 @@ public class UnifiedLibManager : ILibManager
         }
 
         _logger.LogInformation("Restarting module {module}...", moduleName);
+        _autoRestartService?.RecordModuleRestart(moduleName);
         InitialiseSandboxesBaseOnPaths(new[] { module.SandboxModulePath });
     }
 
