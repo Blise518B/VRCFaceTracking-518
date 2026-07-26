@@ -20,6 +20,7 @@ public class PageService : IPageService
         Configure<ParametersViewModel, ParametersPage>();
         Configure<ModuleRegistryViewModel, ModuleRegistryPage>();
         Configure<MutatorViewModel, MutatorPage>();
+        Configure<CurvesViewModel, CurvesPage>();
     }
 
     public Type GetPageType(string key)

@@ -129,6 +129,9 @@ public partial class App : Application
             services.AddTransient<ParametersPage>();
             services.AddTransient<MutatorViewModel>();
             services.AddTransient<MutatorPage>();
+            // Singleton so open curve editors survive navigating away and back
+            services.AddSingleton<CurvesViewModel>();
+            services.AddTransient<CurvesPage>();
             services.AddTransient<OutputViewModel>();
             services.AddTransient<OutputPage>();
             services.AddTransient<SettingsViewModel>();

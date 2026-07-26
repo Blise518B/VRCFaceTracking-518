@@ -395,4 +395,7 @@
   <data name="Shell_TrackingSettings.Content" xml:space="preserve">
     <value>Tracking Settings</value>
   </data>
+  <data name="Shell_Curves.Content" xml:space="preserve">
+    <value>Curve Editor</value>
+  </data>
 </root>

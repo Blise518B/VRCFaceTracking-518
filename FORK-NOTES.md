@@ -78,6 +78,46 @@ Settings persist like all other mutations (also saved when toggling the mutation
 > Tip: the stock "Calibration" and "Parameter Adjustment" mutations overlap with this one.
 > Don't run them at the same time as Range Calibration unless you know what you're doing.
 
+## 4. Curve Editor
+
+`VRCFaceTracking.Core/Params/Data/Mutation/Curves/`, `CurveCalibration.cs`,
+UI in `Controls/CurveEditorControl.xaml` + `Views/CurvesPage.xaml`
+
+A **Curve Editor** page in the nav bar. Each tracking channel gets a full input/output response
+curve you shape by hand instead of a single sensitivity number:
+
+- **Click** empty plot space to add a point, **drag** points to reshape, **right-click** a point
+  to delete it. Endpoints stay pinned horizontally so the curve always covers the full range.
+- Interpolation is monotone cubic (Fritsch-Carlson): smooth, but mathematically incapable of
+  overshooting the points you placed, so output never wiggles outside 0..1.
+- A dashed diagonal shows the untouched 1:1 response, and an **orange live dot** shows where your
+  face currently sits on the curve — so you can tune while making the expression.
+- Tick channels in the left list to open them; **two editors sit side by side**, so you can open
+  **Eye Openness Left and Right together and compare them live**. "Open both eyes" does it in one
+  click. Open channels persist while you navigate around the app.
+
+**100 channels are covered**, importantly including ones that are *not* unified expression
+shapes and so are invisible to every other mutation:
+
+| Category | Channels |
+| --- | --- |
+| Eyes | Eye openness left / right |
+| Eye Gaze | Gaze horizontal + vertical, per eye |
+| Head | Rotation yaw/pitch/roll, position X/Y/Z |
+| Expressions | All 88 unified expression shapes |
+
+Bipolar channels (gaze, head) are folded into 0..1 for editing and expanded back afterwards, so
+every editor reads the same way.
+
+Nothing changes until you bend a curve: every curve starts as a straight 1:1 line, each channel
+has its own on/off switch, and there's a master "Apply curves" toggle (which also enables the
+mutator, so curves can't silently do nothing). Curves are saved automatically shortly after each
+edit.
+
+*Use case this was built for:* one eye tracking as more open than the other. Open both openness
+channels side by side, drag the over-open eye's top-right endpoint down until the eyes match, and
+leave the other one alone.
+
 ---
 
 ## Building

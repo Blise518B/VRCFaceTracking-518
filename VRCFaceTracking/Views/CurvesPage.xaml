@@ -1,0 +1,136 @@
+<Page
+    x:Class="VRCFaceTracking.Views.CurvesPage"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    xmlns:vm="using:VRCFaceTracking.ViewModels"
+    xmlns:helpers="using:VRCFaceTracking.Helpers"
+    mc:Ignorable="d">
+
+    <Page.Resources>
+        <helpers:BooleanToVisibilityConverter x:Key="BoolToVisibility"/>
+    </Page.Resources>
+
+    <Grid>
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="300"/>
+            <ColumnDefinition Width="*"/>
+        </Grid.ColumnDefinitions>
+
+        <!-- Channel picker -->
+        <Grid Grid.Column="0" Margin="0,0,12,0">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="*"/>
+            </Grid.RowDefinitions>
+
+            <Border Grid.Row="0"
+                    Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                    BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                    BorderThickness="1"
+                    CornerRadius="4"
+                    Padding="12,10,12,10"
+                    Margin="0,0,0,8">
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+                    <StackPanel VerticalAlignment="Center">
+                        <TextBlock Text="Apply curves" FontWeight="SemiBold"/>
+                        <TextBlock Text="Off = tracking passes through untouched"
+                                   Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                   FontSize="11"
+                                   TextWrapping="Wrap"/>
+                    </StackPanel>
+                    <ToggleSwitch x:Name="MasterToggle"
+                                  Grid.Column="1"
+                                  OnContent=""
+                                  OffContent=""
+                                  MinWidth="0"
+                                  Toggled="MasterToggle_Toggled"
+                                  VerticalAlignment="Center"/>
+                </Grid>
+            </Border>
+
+            <TextBox x:Name="SearchBox"
+                     Grid.Row="1"
+                     PlaceholderText="Search channels..."
+                     TextChanged="SearchBox_TextChanged"
+                     Margin="0,0,0,8"/>
+
+            <StackPanel Grid.Row="2" Orientation="Horizontal" Spacing="6" Margin="0,0,0,8">
+                <Button Content="Open both eyes" Click="OpenBothEyes_Click"/>
+                <Button Content="Close all" Click="CloseAll_Click"/>
+            </StackPanel>
+
+            <ListView x:Name="ChannelList"
+                      Grid.Row="3"
+                      ItemsSource="{x:Bind ViewModel.FilteredChannels, Mode=OneWay}"
+                      SelectionMode="None">
+                <ListView.ItemTemplate>
+                    <DataTemplate x:DataType="vm:CurveChannelItem">
+                        <Grid Padding="0,2,0,2">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <CheckBox IsChecked="{x:Bind IsOpen, Mode=TwoWay}"
+                                      MinWidth="0"
+                                      Margin="0,0,4,0"
+                                      VerticalAlignment="Center"/>
+                            <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                                <TextBlock Text="{x:Bind Name}" TextWrapping="Wrap" FontSize="13"/>
+                                <TextBlock Text="{x:Bind Category}"
+                                           Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                           FontSize="10"/>
+                            </StackPanel>
+                            <FontIcon Grid.Column="2"
+                                      Glyph="&#xE73E;"
+                                      FontSize="12"
+                                      Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}"
+                                      VerticalAlignment="Center"
+                                      Visibility="{x:Bind IsModified, Mode=OneWay, Converter={StaticResource BoolToVisibility}}"
+                                      ToolTipService.ToolTip="This channel's curve is active"/>
+                        </Grid>
+                    </DataTemplate>
+                </ListView.ItemTemplate>
+            </ListView>
+        </Grid>
+
+        <!-- Open editors -->
+        <Grid Grid.Column="1">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="*"/>
+            </Grid.RowDefinitions>
+
+            <InfoBar x:Name="MutationMissingBar"
+                     Grid.Row="0"
+                     IsOpen="False"
+                     IsClosable="False"
+                     Severity="Warning"
+                     Title="Tracking not ready"
+                     Message="Curves become available once modules have finished initializing. Go back to Home, wait a moment, then return here."
+                     Margin="0,0,0,8"/>
+
+            <TextBlock x:Name="EmptyHint"
+                       Grid.Row="1"
+                       Text="Tick channels on the left to open their curve editors here.&#x0a;&#x0a;Two editors sit side by side, so you can open Eye Openness Left and Right together and compare them while you move your face.&#x0a;&#x0a;Click the plot to add a point, drag points to shape the response, right-click a point to delete it. The orange dot shows where you are right now."
+                       Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                       TextWrapping="Wrap"
+                       MaxWidth="520"
+                       VerticalAlignment="Center"
+                       HorizontalAlignment="Center"
+                       TextAlignment="Center"/>
+
+            <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto">
+                <StackPanel x:Name="CardsHost" Spacing="10"/>
+            </ScrollViewer>
+        </Grid>
+    </Grid>
+</Page>

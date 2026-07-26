@@ -1,0 +1,24 @@
+<UserControl
+    x:Class="VRCFaceTracking.Controls.CurveEditorControl"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    mc:Ignorable="d">
+
+    <Grid>
+        <Border Background="{ThemeResource CardBackgroundFillColorSecondaryBrush}"
+                BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                BorderThickness="1"
+                CornerRadius="4"/>
+        <Canvas x:Name="PlotCanvas"
+                Background="Transparent"
+                SizeChanged="PlotCanvas_SizeChanged"
+                PointerPressed="PlotCanvas_PointerPressed"
+                PointerMoved="PlotCanvas_PointerMoved"
+                PointerReleased="PlotCanvas_PointerReleased"
+                PointerCanceled="PlotCanvas_PointerReleased"
+                PointerCaptureLost="PlotCanvas_PointerReleased"
+                RightTapped="PlotCanvas_RightTapped"/>
+    </Grid>
+</UserControl>
