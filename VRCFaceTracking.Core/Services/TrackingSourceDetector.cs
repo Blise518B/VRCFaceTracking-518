@@ -1,5 +1,7 @@
 ﻿using System.Diagnostics;
 using System.IO.MemoryMappedFiles;
+using System.Net;
+using System.Net.Sockets;
 using Microsoft.Extensions.Logging;
 
 namespace VRCFaceTracking.Core.Services;
@@ -15,6 +17,7 @@ namespace VRCFaceTracking.Core.Services;
 public class TrackingSourceDetector
 {
     private static readonly TimeSpan CacheLifetime = TimeSpan.FromSeconds(5);
+    private static readonly TimeSpan UdpProbeWindow = TimeSpan.FromMilliseconds(250);
 
     /// <summary>A thing that can feed tracking data, and how to recognise it.</summary>
     public sealed class TrackingSource
@@ -32,6 +35,13 @@ public class TrackingSourceDetector
 
         /// <summary>Named pipes that exist while this source is streaming.</summary>
         public string[] Pipes { get; init; } = Array.Empty<string>();
+
+        /// <summary>
+        /// UDP ports this source streams TO, for sources that are just a network stream with
+        /// no process on this PC (a phone app, for instance). Probed by briefly listening -
+        /// see ProbeUdpStream for why that is safe and why ownership is never used.
+        /// </summary>
+        public int[] UdpStreamPorts { get; init; } = Array.Empty<int>();
 
         /// <summary>
         /// True when this source is only recognisable by a shared VR runtime (SteamVR,
@@ -108,6 +118,15 @@ public class TrackingSourceDetector
             ModuleKeywords = new[] { "etvr", "eyetrack" },
             Processes = new[] { "EyeTrackApp", "eyetrackvr", "ETVR", "eyetrackapp" },
             Notes = "DIY eye tracking; the EyeTrackVR app must be open and streaming.",
+        },
+        new()
+        {
+            Name = "iFacialMocap (iPhone / iPad)",
+            ModuleKeywords = new[] { "ifacialmocap", "ifacial" },
+            UdpStreamPorts = new[] { 49983 },
+            Notes = "A phone app, so there is no process on this PC to look for - detected by "
+                  + "listening for the phone's stream on UDP 49983. Start iFacialMocap on the "
+                  + "phone with this PC's IP set as the destination.",
         },
         new()
         {
@@ -200,6 +219,21 @@ public class TrackingSourceDetector
                         }
                     }
 
+                    foreach (var port in source.UdpStreamPorts)
+                    {
+                        var (bindable, dataWaiting) = ProbeUdpStream(port);
+                        if (!bindable)
+                        {
+                            // Someone already listens there, which in practice is this
+                            // module's own sandbox process: it's running, so report the
+                            // source as live rather than pulling the rug out from under it.
+                            evidence.Add($"UDP {port} in use (the module is already listening)");
+                        }
+                        else if (dataWaiting)
+                        {
+                            evidence.Add($"data arriving on UDP {port}");
+                        }
+                    }
                 }
 
                 results.Add(new TrackingSourceStatus
@@ -336,6 +370,42 @@ public class TrackingSourceDetector
         catch (Exception)
         {
             return new List<string>();
+        }
+    }
+
+    /// <summary>
+    /// Listens on a stream port for a moment to see whether anything is actually sending.
+    ///
+    /// Two rules make this safe. It only ever binds a port that is FREE, so it can never take
+    /// a datagram away from the module that needs it - a failed bind is itself the answer
+    /// ("the module already has it"). And it asks whether data is waiting rather than reading
+    /// it, so nothing is consumed even in the moment we hold the socket.
+    ///
+    /// Port OWNERSHIP is deliberately not used as evidence anywhere: measuring that on a live
+    /// setup found port 8889 held by VRCFaceTracking's own ETVR module, i.e. a probe reporting
+    /// our own listener back to us and keeping a module "detected" forever.
+    /// </summary>
+    private static (bool Bindable, bool DataWaiting) ProbeUdpStream(int port)
+    {
+        try
+        {
+            using var socket = new Socket(AddressFamily.InterNetwork, SocketType.Dgram, ProtocolType.Udp);
+            // No address reuse: a busy port MUST fail to bind, that's the signal.
+            socket.ExclusiveAddressUse = true;
+            // Phones send to this PC's LAN address, so loopback-only would never see it.
+            socket.Bind(new IPEndPoint(IPAddress.Any, port));
+
+            // iFacialMocap streams at ~60 Hz, so a live phone shows up in a few ms;
+            // this window is generous while staying short enough for a UI refresh.
+            return (true, socket.Poll(UdpProbeWindow, SelectMode.SelectRead));
+        }
+        catch (SocketException)
+        {
+            return (false, false);
+        }
+        catch (Exception)
+        {
+            return (false, false);
         }
     }
 

@@ -52,6 +52,8 @@ public class UnifiedLibManager : ILibManager
     private const int MaxRestartsInWindow = 5;
     private static readonly TimeSpan RestartWindow = TimeSpan.FromMinutes(5);
     private const int SupervisorPollIntervalMs = 2000;
+    private int _hotPlugTicks;
+    private const int HotPlugCheckEveryTicks = 5;   // ~10s between source re-checks
     #endregion
 
     private readonly AutoRestartService _autoRestartService;
@@ -104,6 +106,22 @@ public class UnifiedLibManager : ILibManager
                 catch ( Exception e )
                 {
                     _logger.LogError("Module supervisor error: {message}", e.Message);
+                }
+
+                try
+                {
+                    // Sources appear mid-session: someone starts iFacialMocap on their phone,
+                    // or plugs a tracker in, long after VRCFT launched. Without this the module
+                    // stays dormant until a manual re-init, which looks like it doesn't work.
+                    if ( ++_hotPlugTicks >= HotPlugCheckEveryTicks )
+                    {
+                        _hotPlugTicks = 0;
+                        StartModulesWhoseSourceAppeared();
+                    }
+                }
+                catch ( Exception e )
+                {
+                    _logger.LogDebug("Source hot-plug check failed: {message}", e.Message);
                 }
             }
         });
@@ -200,6 +218,19 @@ public class UnifiedLibManager : ILibManager
         _logger.LogWarning("Module {module} (PID {pid}) died unexpectedly with exit code {code}.", moduleName, module.SandboxProcessPID, exitCode);
         _crashReportService?.ReportModuleCrash(moduleName, exitCode, module.GetOutputTail());
 
+        // A module whose source went away is not crashing, it's finished: iFacialMocap for
+        // instance gives up (non-zero) after waiting two minutes for a phone that isn't
+        // streaming. Restarting into a source that isn't there just loops until the cap,
+        // so re-check first and go dormant instead - that IS the deactivation trigger.
+        if ( !SourceStillPresentFor(module.SandboxModulePath, out var goneReason) )
+        {
+            _logger.LogInformation(
+                "Not restarting {module}: {reason}. It will start again on its own once the source is back.",
+                moduleName, goneReason);
+            MarkModuleDormant(moduleName, goneReason);
+            return;
+        }
+
         if ( !CanRestart(module.SandboxModulePath) )
         {
             _logger.LogError("Module {module} crashed {count} times within {window} minutes. Giving up on restarting it.",
@@ -214,6 +245,163 @@ public class UnifiedLibManager : ILibManager
         _logger.LogInformation("Restarting module {module}...", moduleName);
         _autoRestartService?.RecordModuleRestart(moduleName);
         InitialiseSandboxesBaseOnPaths(new[] { module.SandboxModulePath });
+    }
+
+    /// <summary>
+    /// Starts any installed module that isn't running but whose tracking source has since
+    /// appeared - the counterpart to going dormant when a source disappears. Together they
+    /// mean the user just starts and stops the source itself, and nothing here needs touching.
+    /// </summary>
+    private void StartModulesWhoseSourceAppeared()
+    {
+        if ( _suppressAutoRestart || _moduleActivationService == null || !_moduleActivationService.GatingEnabled )
+        {
+            return;
+        }
+
+        var modules = _moduleDataService.GetInstalledModules()
+            .Concat(_moduleDataService.GetLegacyModules())
+            .ToList();
+        if ( modules.Count == 0 )
+        {
+            return;
+        }
+
+        List<string> runningPaths;
+        lock ( AvailableSandboxModules )
+        {
+            runningPaths = AvailableSandboxModules
+                .Where(m => m.Process is { HasExited: false })
+                .Select(m => m.SandboxModulePath ?? string.Empty)
+                .ToList();
+        }
+
+        foreach ( var decision in _moduleActivationService.Evaluate(modules).Where(d => d.WillStart) )
+        {
+            if ( string.IsNullOrEmpty(decision.DllName) )
+            {
+                continue;
+            }
+
+            var alreadyRunning = runningPaths.Any(p =>
+                p.EndsWith(decision.DllName, StringComparison.OrdinalIgnoreCase));
+            if ( alreadyRunning )
+            {
+                continue;
+            }
+
+            // CanRestart both checks the cap AND records the attempt, so a module that keeps
+            // dying can't be revived here every ten seconds forever - that would defeat the
+            // giving-up logic entirely.
+            var path = modules
+                .Select(m => m.AssemblyLoadPath)
+                .FirstOrDefault(p => !string.IsNullOrEmpty(p) &&
+                                     p.EndsWith(decision.DllName, StringComparison.OrdinalIgnoreCase));
+            if ( string.IsNullOrEmpty(path) || !CanRestart(path) )
+            {
+                continue;
+            }
+
+            _logger.LogInformation("{module}: {reason}. Starting it now.", decision.DisplayName, decision.Reason);
+            InitialiseSandboxesBaseOnPaths(new[] { path });
+        }
+    }
+
+    /// <summary>
+    /// Re-runs the activation decision for a module that just died, so a vanished source is
+    /// told apart from a real crash. Unknown modules always pass: never withhold a restart
+    /// from a module we have no opinion about.
+    /// </summary>
+    private bool SourceStillPresentFor(string? modulePath, out string reason)
+    {
+        reason = string.Empty;
+        if ( _moduleActivationService == null || string.IsNullOrEmpty(modulePath) )
+        {
+            return true;
+        }
+
+        try
+        {
+            var modules = _moduleDataService.GetInstalledModules()
+                .Concat(_moduleDataService.GetLegacyModules())
+                .ToList();
+
+            // Force a fresh probe. The cached sweep is up to 5s old, and for a stream-only
+            // source it was taken while THIS module still held the port - i.e. it reports
+            // "in use, so it's live", which would wave every restart through. The port only
+            // becomes probe-able the moment the module dies, which is exactly now.
+            _moduleActivationService.Detector.Scan(force: true);
+
+            var decision = _moduleActivationService.Evaluate(modules).FirstOrDefault(d =>
+                !string.IsNullOrEmpty(d.DllName) &&
+                modulePath.EndsWith(d.DllName, StringComparison.OrdinalIgnoreCase));
+
+            if ( decision == null || decision.WillStart )
+            {
+                return true;
+            }
+
+            reason = decision.Reason;
+            return false;
+        }
+        catch ( Exception e )
+        {
+            _logger.LogDebug("Could not re-check the source for {path}: {message}", modulePath, e.Message);
+            return true;
+        }
+    }
+
+    /// <summary>Letters and digits only, lowercased - for comparing module display names.</summary>
+    private static string Simplify(string? name) =>
+        string.IsNullOrEmpty(name)
+            ? string.Empty
+            : new string(name.Where(char.IsLetterOrDigit).ToArray()).ToLowerInvariant();
+
+    /// <summary>
+    /// Shows a module as present-but-idle with the reason. A module that just disappears from
+    /// the list reads as uninstalled, which is exactly the confusion this avoids.
+    /// </summary>
+    private void MarkModuleDormant(string moduleName, string reason)
+    {
+        _dispatcherService.Run(() =>
+        {
+            try
+            {
+                // Match loosely on purpose: the startup pass names the card from the module
+                // manifest ("iFacialMocap Tracking Module") while a running module reports
+                // itself more briefly ("iFacialMocap"), and an exact compare produced two
+                // cards for the same module.
+                var key = Simplify(moduleName);
+                var existing = LoadedModulesMetadata.FirstOrDefault(m =>
+                {
+                    var name = Simplify(m.Name);
+                    return name.Length > 0 && key.Length > 0 &&
+                           (name.Contains(key, StringComparison.Ordinal) ||
+                            key.Contains(name, StringComparison.Ordinal));
+                });
+
+                if ( existing != null )
+                {
+                    existing.Active = false;
+                    existing.IsDormant = true;
+                    existing.StatusNote = reason;
+                    return;
+                }
+
+                LoadedModulesMetadata.Add(new ModuleMetadataInternal
+                {
+                    Name = moduleName,
+                    Active = false,
+                    IsDormant = true,
+                    StatusNote = reason,
+                    StaticImages = new List<Stream>(),
+                });
+            }
+            catch ( Exception )
+            {
+                // Cosmetic bookkeeping; never let it affect the supervisor
+            }
+        });
     }
 
     private bool CanRestart(string modulePath)
