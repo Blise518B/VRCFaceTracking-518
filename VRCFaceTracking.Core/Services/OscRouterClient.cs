@@ -67,9 +67,12 @@ public partial class OscRouterClient : ObservableObject
         _recvService = recvService;
         _dispatcherService = dispatcherService;
 
-        PropertyChanged += (_, _) =>
+        PropertyChanged += (_, args) =>
         {
-            if (_initialized)
+            // Only the toggle is persisted. LinkStatus changes on every keep-alive and its
+            // lost-contact text counts seconds, so saving on any property rewrote the whole
+            // settings file every 20s forever - and the lite build writes it synchronously.
+            if (_initialized && args.PropertyName == nameof(Enabled))
             {
                 _settingsService.Save(this);
             }
@@ -199,7 +202,7 @@ public partial class OscRouterClient : ObservableObject
             SetStatus(since < TimeSpan.FromSeconds(60)
                 ? $"connected on port {localPort} (router is running)"
                 : _lastReplyUtc == DateTime.MinValue
-                    ? "no router found - start OSC Router 518 to enable the fallback"
+                    ? "no hub found - start the 518 Hub to enable the fallback"
                     : $"lost contact {(int)since.TotalSeconds}s ago - is the router still running?");
 
             try

@@ -1,4 +1,4 @@
-"""Generates the VRCFaceTracking - Blise518B Edition icon.
+"""Generates the VRCFaceTracking - 518 Edition icon.
 
 House style (same as VRC Parameter Relay's tools/make_icon.py):
     white disc, thick black ring close to the edge, black glyph inside.

@@ -1,4 +1,4 @@
-﻿using System.ComponentModel;
+using System.ComponentModel;
 using System.Runtime.InteropServices.WindowsRuntime;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
@@ -17,7 +17,7 @@ namespace VRCFaceTracking.Views;
 
 public sealed partial class SettingsPage : Page, INotifyPropertyChanged
 {
-    public event PropertyChangedEventHandler PropertyChanged;
+    public event PropertyChangedEventHandler? PropertyChanged;
 
     public bool HasNoRestartEvents => ViewModel.AutoRestart.RecentEvents.Count == 0;
 

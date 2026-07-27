@@ -227,7 +227,7 @@ public class UnifiedLibManager : ILibManager
             _logger.LogInformation(
                 "Not restarting {module}: {reason}. It will start again on its own once the source is back.",
                 moduleName, goneReason);
-            MarkModuleDormant(moduleName, goneReason);
+            MarkModuleDormant(moduleName, goneReason, module.SandboxModulePath);
             return;
         }
 
@@ -351,6 +351,36 @@ public class UnifiedLibManager : ILibManager
         }
     }
 
+    /// <summary>
+    /// Drops the dormant placeholder for a module that has just started. Matched on the dll,
+    /// the one identity both sides genuinely share.
+    /// </summary>
+    private void RemoveDormantCardFor(string? modulePath)
+    {
+        if ( string.IsNullOrEmpty(modulePath) )
+        {
+            return;
+        }
+
+        try
+        {
+            var dll = Path.GetFileName(modulePath);
+            for ( var i = LoadedModulesMetadata.Count - 1; i >= 0; i-- )
+            {
+                var card = LoadedModulesMetadata[i];
+                if ( card.IsDormant && !string.IsNullOrEmpty(card.SourceDll) &&
+                     string.Equals(card.SourceDll, dll, StringComparison.OrdinalIgnoreCase) )
+                {
+                    LoadedModulesMetadata.RemoveAt(i);
+                }
+            }
+        }
+        catch ( Exception )
+        {
+            // Cosmetic bookkeeping; never let it affect module startup
+        }
+    }
+
     /// <summary>Letters and digits only, lowercased - for comparing module display names.</summary>
     private static string Simplify(string? name) =>
         string.IsNullOrEmpty(name)
@@ -361,30 +391,41 @@ public class UnifiedLibManager : ILibManager
     /// Shows a module as present-but-idle with the reason. A module that just disappears from
     /// the list reads as uninstalled, which is exactly the confusion this avoids.
     /// </summary>
-    private void MarkModuleDormant(string moduleName, string reason)
+    private void MarkModuleDormant(string moduleName, string reason, string? modulePath = null)
     {
         _dispatcherService.Run(() =>
         {
             try
             {
-                // Match loosely on purpose: the startup pass names the card from the module
-                // manifest ("iFacialMocap Tracking Module") while a running module reports
-                // itself more briefly ("iFacialMocap"), and an exact compare produced two
-                // cards for the same module.
-                var key = Simplify(moduleName);
-                var existing = LoadedModulesMetadata.FirstOrDefault(m =>
+                var dll = string.IsNullOrEmpty(modulePath) ? null : Path.GetFileName(modulePath);
+
+                // Prefer the dll - the only identity a dormant card and a live module reliably
+                // share. Names differ between the two ("ETVR Tracking Module" from the manifest
+                // vs "ETVR Eye Tracking module" at runtime), so the name compare is a fallback
+                // for callers that have no path to give.
+                var existing = dll == null
+                    ? null
+                    : LoadedModulesMetadata.FirstOrDefault(m =>
+                        string.Equals(m.SourceDll, dll, StringComparison.OrdinalIgnoreCase));
+
+                if ( existing == null )
                 {
-                    var name = Simplify(m.Name);
-                    return name.Length > 0 && key.Length > 0 &&
-                           (name.Contains(key, StringComparison.Ordinal) ||
-                            key.Contains(name, StringComparison.Ordinal));
-                });
+                    var key = Simplify(moduleName);
+                    existing = LoadedModulesMetadata.FirstOrDefault(m =>
+                    {
+                        var name = Simplify(m.Name);
+                        return name.Length > 0 && key.Length > 0 &&
+                               (name.Contains(key, StringComparison.Ordinal) ||
+                                key.Contains(name, StringComparison.Ordinal));
+                    });
+                }
 
                 if ( existing != null )
                 {
                     existing.Active = false;
                     existing.IsDormant = true;
                     existing.StatusNote = reason;
+                    existing.SourceDll ??= dll;
                     return;
                 }
 
@@ -394,6 +435,7 @@ public class UnifiedLibManager : ILibManager
                     Active = false,
                     IsDormant = true,
                     StatusNote = reason,
+                    SourceDll = dll,
                     StaticImages = new List<Stream>(),
                 });
             }
@@ -582,6 +624,14 @@ public class UnifiedLibManager : ILibManager
 
                             _dispatcherService.Run(() => {
 
+                                // This module just came up, so any dormant card standing in for
+                                // it is stale. Cleared by dll rather than by name: the dormant
+                                // card is named from the manifest ("ETVR Tracking Module") and
+                                // the live one names itself ("ETVR Eye Tracking module"), so the
+                                // name compare below never pairs them and the module ends up
+                                // listed as in-use AND not-in-use at the same time.
+                                RemoveDormantCardFor(AvailableSandboxModules[moduleIndex].SandboxModulePath);
+
                                 // Check if the module is already loaded on the user-facing side. If so, overwrite with the new module if it's unloaded
                                 var isModuleLoaded = false;
                                 for ( var i = 0; i < LoadedModulesMetadata.Count; i++ )
@@ -689,6 +739,7 @@ public class UnifiedLibManager : ILibManager
                             Active = false,
                             IsDormant = true,
                             StatusNote = decision.Reason,
+                            SourceDll = decision.DllName,
                             StaticImages = new List<Stream>(),
                         });
                     }

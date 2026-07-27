@@ -69,6 +69,16 @@ public class ModuleMetadataInternal : INotifyPropertyChanged
         }
     }
 
+    /// <summary>
+    /// Dll file name this card was built from, for dormant cards only.
+    ///
+    /// Names cannot be used to pair a dormant card with its running module: the dormant one
+    /// is named from the module manifest ("ETVR Tracking Module") while the module reports
+    /// something else at runtime ("ETVR Eye Tracking module"). Matching on those produced a
+    /// module listed as in-use and not-in-use simultaneously.
+    /// </summary>
+    public string SourceDll { get; set; }
+
     /// <summary>Why this module is dormant, shown on its card.</summary>
     public string StatusNote
     {

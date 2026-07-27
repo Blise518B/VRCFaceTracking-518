@@ -640,7 +640,7 @@ public static class Program
     private static string Trim(string? text, int max)
     {
         text ??= string.Empty;
-        return text.Length <= max ? text : text[..Math.Max(0, max - 1)] + "â€¦";
+        return text.Length <= max ? text : text[..Math.Max(0, max - 1)] + "…";
     }
 
     private static string Describe(TimeSpan span) =>

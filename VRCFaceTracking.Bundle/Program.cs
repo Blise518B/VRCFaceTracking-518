@@ -38,7 +38,7 @@ public static class Program
 
             var baseDir = Path.Combine(
                 Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-                "VRCFaceTracking-Blise518B");
+                "VRCFaceTracking-518");
             var appDir = Path.Combine(baseDir, "app");
             var markerFile = Path.Combine(baseDir, "installed.txt");
             var exePath = Path.Combine(appDir, AppFolderInZip, "VRCFaceTracking.exe");

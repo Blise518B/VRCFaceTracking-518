@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Linq;
 using Microsoft.Extensions.Logging;
@@ -23,7 +24,15 @@ public class CurveCalibration : TrackingMutation
     /// <summary>
     /// Named curve sets, so each tracking source can have its own shaping. Keyed by profile name.
     /// </summary>
-    public Dictionary<string, CurveProfile> Profiles = new();
+    /// <summary>
+    /// Named profiles, keyed by name.
+    ///
+    /// Concurrent because auto-switch adds one from the 100Hz tracking thread the first time
+    /// a source appears, while the UI enumerates the same dictionary for its picker - a plain
+    /// Dictionary tears there. GetOrAdd makes the create atomic, and enumeration takes a
+    /// snapshot rather than throwing. Serialises exactly like a Dictionary.
+    /// </summary>
+    public ConcurrentDictionary<string, CurveProfile> Profiles = new();
 
     /// <summary>Profile in use when <see cref="AutoSwitchBySource"/> is off, or as the fallback.</summary>
     public string ActiveProfileName = CurveProfile.DefaultName;
@@ -69,7 +78,7 @@ public class CurveCalibration : TrackingMutation
     /// </summary>
     private void EnsureValid()
     {
-        Profiles ??= new Dictionary<string, CurveProfile>();
+        Profiles ??= new ConcurrentDictionary<string, CurveProfile>();
 
         if (Profiles.Count == 0)
         {
@@ -117,11 +126,14 @@ public class CurveCalibration : TrackingMutation
 
     public CurveProfile GetOrCreateProfile(string name)
     {
-        Profiles ??= new Dictionary<string, CurveProfile>();
-        if (!Profiles.TryGetValue(name, out var profile) || profile == null)
+        Profiles ??= new ConcurrentDictionary<string, CurveProfile>();
+        // Atomic: the tracking thread can be creating the profile for a newly detected
+        // source at the same moment the UI is adding one from the Curve Editor.
+        var profile = Profiles.GetOrAdd(name, key => new CurveProfile(key));
+        if (profile == null)
         {
             profile = new CurveProfile(name);
-            Profiles[name] = profile;
+            Profiles[name] = profile;   // a null survived deserialisation; replace it
         }
         return profile;
     }
@@ -143,7 +155,7 @@ public class CurveCalibration : TrackingMutation
             return false;
         }
 
-        Profiles.Remove(name);
+        Profiles.TryRemove(name, out _);
         if (ActiveProfileName == name)
         {
             SetActiveProfile(Profiles.Keys.First());
