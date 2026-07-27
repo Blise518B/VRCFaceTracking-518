@@ -2,8 +2,8 @@
 $ErrorActionPreference = "Stop"
 $root = $PSScriptRoot
 $src = Join-Path $root "VRCFaceTracking\bin\x64\Release\net10.0-windows10.0.22621.0\win-x64"
-$dst = Join-Path $root "dist\VRCFaceTracking-Blise518B-Edition"
-$zip = Join-Path $root "dist\VRCFaceTracking-Blise518B-Edition.zip"
+$dst = Join-Path $root "dist\VRCFaceTracking-518-Edition"
+$zip = Join-Path $root "dist\VRCFaceTracking-518-Edition.zip"
 
 if (-not (Test-Path (Join-Path $src "VRCFaceTracking.exe"))) {
     Write-Host "No Release build found. Run build.bat (or update.bat) first." -ForegroundColor Red
@@ -18,7 +18,7 @@ Write-Host "Copying build..."
 Copy-Item "$src\*" $dst -Recurse -Exclude *.pdb
 
 @"
-VRCFaceTracking - Blise518B Edition
+VRCFaceTracking - 518 Edition
 ====================================
 
 Custom build of VRCFaceTracking (https://github.com/benaclejames/VRCFaceTracking, Apache 2.0)
@@ -53,8 +53,8 @@ if ($LASTEXITCODE -ne 0) {
     explorer /select,$zip
     exit 1
 }
-$exe = Join-Path $root "dist\VRCFaceTracking-Blise518B-Edition.exe"
-Copy-Item (Join-Path $bundleOut "VRCFaceTracking-Blise518B-Edition.exe") $exe -Force
+$exe = Join-Path $root "dist\VRCFaceTracking-518-Edition.exe"
+Copy-Item (Join-Path $bundleOut "VRCFaceTracking-518-Edition.exe") $exe -Force
 
 Write-Host ("Done: {0} ({1:N1} MB)" -f $exe, ((Get-Item $exe).Length / 1MB)) -ForegroundColor Green
 Write-Host "Send your friends the .exe - they double-click it and it unpacks + starts itself."

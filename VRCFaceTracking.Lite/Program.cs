@@ -1,4 +1,4 @@
-﻿using System.Diagnostics;
+using System.Diagnostics;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using VRCFaceTracking.Core;
@@ -62,7 +62,7 @@ public static class Program
             ConsoleWindow.Breadcrumb("could not get own window, carrying on in this one");
         }
 
-        Console.Title = "VRCFaceTracking Lite - Blise518B Edition";
+        Console.Title = "VRCFaceTracking Lite - 518 Edition";
         ConsoleWindow.SetIcon();
         ConsoleWindow.Breadcrumb("title + icon set");
         CrashReportService.EarlyStartup();
@@ -344,7 +344,7 @@ public static class Program
 
             var lines = new List<Seg[]>
             {
-                Line(new Seg("VRCFaceTracking", Header), new Seg(" - Blise518B Edition   ", Body),
+                Line(new Seg("VRCFaceTracking", Header), new Seg(" - 518 Edition   ", Body),
                      new Seg("[ lite monitor ]", Secondary)),
                 Line(new Seg(new string('=', 62), Frame)),
                 Line(new Seg("  uptime      ", Dim), new Seg(Describe(DateTime.Now - Started), Value)),

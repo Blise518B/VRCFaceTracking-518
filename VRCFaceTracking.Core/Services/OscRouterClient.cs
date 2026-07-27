@@ -8,7 +8,7 @@ using VRCFaceTracking.Core.OSC;
 namespace VRCFaceTracking.Core.Services;
 
 /// <summary>
-/// Tier 1 client for the 518 OSC Fallback Standard (see OscRouter518/docs/STANDARD.md).
+/// Tier 1 client for the 518 OSC Fallback Standard (see 518Hub/docs/STANDARD.md).
 ///
 /// VRChat's mDNS listener dies after a few hours, after which it never discovers a
 /// freshly started VRCFT - so no incoming avatar parameters, only a VRChat restart

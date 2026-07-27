@@ -394,7 +394,7 @@ public class CrashReportService
         }
 
         var header = new StringBuilder();
-        header.AppendLine("VRCFaceTracking - Blise518B Edition :: crash report");
+        header.AppendLine("VRCFaceTracking - 518 Edition :: crash report");
         header.AppendLine(new string('=', 64));
         header.AppendLine($"When:        {DateTime.Now:yyyy-MM-dd HH:mm:ss} (local)");
         header.AppendLine($"Summary:     {summary}");

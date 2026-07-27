@@ -6,18 +6,18 @@ using System.Security.Cryptography;
 namespace VRCFaceTracking.Bundle;
 
 /// <summary>
-/// Single-file distributable for VRCFaceTracking - Blise518B Edition. The full app is
+/// Single-file distributable for VRCFaceTracking - 518 Edition. The full app is
 /// embedded as a zip. On first run (or after an update) it unpacks itself to LocalAppData,
 /// then starts the real app. Friends get exactly one file to double-click.
 /// </summary>
 public static class Program
 {
     private const string PayloadName = "AppPayload.zip";
-    private const string AppFolderInZip = "VRCFaceTracking-Blise518B-Edition";
+    private const string AppFolderInZip = "VRCFaceTracking-518-Edition";
 
     public static int Main(string[] args)
     {
-        Console.WriteLine("VRCFaceTracking - Blise518B Edition");
+        Console.WriteLine("VRCFaceTracking - 518 Edition");
 
         try
         {
