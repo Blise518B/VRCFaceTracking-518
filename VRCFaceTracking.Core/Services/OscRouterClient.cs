@@ -30,6 +30,9 @@ public partial class OscRouterClient : ObservableObject
     private static readonly TimeSpan KeepAliveInterval = TimeSpan.FromSeconds(20);
     private static readonly byte[] ControlPrefix = "/router518/"u8.ToArray();
 
+    /// <summary>How we identify ourselves to the router's control panel.</summary>
+    private const string ProgramName = "VRCFaceTracking 518";
+
     [ObservableProperty]
     [property: SavedSetting("UseOscRouter518", true)]
     private bool _enabled = true;
@@ -177,7 +180,7 @@ public partial class OscRouterClient : ObservableObject
 
     private async Task KeepAliveLoop(int localPort, CancellationToken token)
     {
-        var subscribe = BuildControl("/router518/subscribe", localPort);
+        var subscribe = BuildControl("/router518/subscribe", localPort, ProgramName);
         while (!token.IsCancellationRequested)
         {
             try
@@ -260,8 +263,12 @@ public partial class OscRouterClient : ObservableObject
         }
     }
 
-    /// <summary>Builds /addr <port:int32> - the only OSC shape the control channel needs.</summary>
-    private static byte[] BuildControl(string address, int port)
+    /// <summary>
+    /// Builds /addr &lt;port:int32&gt; with an optional trailing name string, so the router's
+    /// control panel can list us by name instead of inferring it from whichever process
+    /// happens to own the port.
+    /// </summary>
+    private static byte[] BuildControl(string address, int port, string? name = null)
     {
         static byte[] Pad(byte[] raw)
         {
@@ -272,17 +279,23 @@ public partial class OscRouterClient : ObservableObject
         }
 
         var head = Pad(System.Text.Encoding.ASCII.GetBytes(address));
-        var tags = Pad(",i"u8.ToArray());
+        var withName = !string.IsNullOrEmpty(name);
+        var tags = Pad(withName ? ",is"u8.ToArray() : ",i"u8.ToArray());
         var value = BitConverter.GetBytes(port);
         if (BitConverter.IsLittleEndian)
         {
             Array.Reverse(value);
         }
 
-        var packet = new byte[head.Length + tags.Length + 4];
+        var nameBytes = withName
+            ? Pad(System.Text.Encoding.ASCII.GetBytes(name!))
+            : Array.Empty<byte>();
+
+        var packet = new byte[head.Length + tags.Length + 4 + nameBytes.Length];
         head.CopyTo(packet, 0);
         tags.CopyTo(packet, head.Length);
         value.CopyTo(packet, head.Length + tags.Length);
+        nameBytes.CopyTo(packet, head.Length + tags.Length + 4);
         return packet;
     }
 }
