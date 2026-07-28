@@ -211,6 +211,21 @@ Design rules:
 - Commands persist in settings under `CompanionAppCommands`. "Project Babble" ships with a
   default suggestion (the Baballonia Steam URI); everything else starts empty.
 
+### Startup auto-launch
+
+Each source's gear flyout also has a **"Launch with VRCFaceTracking"** toggle (persisted under
+`CompanionAppAutoLaunch`). At app startup, every source with the toggle on and a command
+configured is started — unless detection already sees it running. Combined with the SteamVR
+launch-mode switch, one action brings up the whole stack: SteamVR → VRCFT → BrokenEye + camera
+apps → modules auto-activate.
+
+- The skip check makes startup idempotent: watchdog relaunches after a crash never spawn
+  duplicate companion apps.
+- After launching, the detector cache is force-refreshed so the module start decisions that
+  follow in the same startup see the new processes. (Steam-URI apps can take longer to appear
+  than plain exes; those sources may need one re-initialise on a cold start.)
+- Auto-launch failures are logged and never block startup.
+
 Also added a **BrokenEye (Dream Air Tobii bridge)** entry to the known tracking sources
 (process names `BrokenEye`/`BrokenEyeApp`), and the Baballonia process names to the Project
 Babble entry — so both detect properly and can carry launch buttons.

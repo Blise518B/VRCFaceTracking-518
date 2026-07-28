@@ -239,8 +239,11 @@ public partial class App : Application
         // where the per-module start decisions get applied
         await App.GetService<ModuleActivationService>().InitializeAsync();
 
-        // Companion app launch commands for the Sources page buttons
-        await App.GetService<CompanionAppService>().InitializeAsync();
+        // Companion app launch commands for the Sources page buttons, then bring up
+        // anything marked "launch with VRCFT" (skips apps that are already running)
+        var companions = App.GetService<CompanionAppService>();
+        await companions.InitializeAsync();
+        companions.LaunchConfiguredAtStartup();
 
         // 518 OSC Fallback Standard client: receives VRChat's stream via OSC Router 518
         // when VRChat's own discovery can no longer see us (dead after long sessions)

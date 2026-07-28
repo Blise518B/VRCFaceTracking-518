@@ -119,37 +119,48 @@
                                                    Visibility="{x:Bind HasLaunchStatus, Mode=OneWay, Converter={StaticResource BoolToVisibility}}"/>
                                     </StackPanel>
 
-                                    <StackPanel Grid.Column="3" Orientation="Horizontal"
-                                                Spacing="6" VerticalAlignment="Center">
-                                        <Button Content="Launch"
-                                                Style="{StaticResource AccentButtonStyle}"
-                                                Click="{x:Bind Launch}"
-                                                Visibility="{x:Bind ShowLaunch, Mode=OneWay, Converter={StaticResource BoolToVisibility}}"/>
-                                        <Button Padding="6,4,6,4"
-                                                VerticalAlignment="Center"
-                                                ToolTipService.ToolTip="Set the launch command for this source">
-                                            <FontIcon Glyph="&#xE713;" FontSize="14"/>
-                                            <Button.Flyout>
-                                                <Flyout Placement="Left">
-                                                    <StackPanel Width="380" Spacing="8">
-                                                        <TextBlock FontWeight="SemiBold">
-                                                            <Run Text="Launch command for"/>
-                                                            <Run Text="{x:Bind Name}"/>
-                                                        </TextBlock>
-                                                        <TextBox Text="{x:Bind LaunchCommand, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
-                                                                 PlaceholderText="C:\path\to\app.exe  -or-  steam://rungameid/..."
-                                                                 FontFamily="Consolas" FontSize="12"/>
-                                                        <TextBlock Text="Quotes around paths with spaces are optional; anything after the path is passed as arguments. Clear the box to remove the button."
-                                                                   FontSize="11"
-                                                                   Foreground="{ThemeResource TextFillColorTertiaryBrush}"
-                                                                   TextWrapping="Wrap"/>
-                                                        <Button Content="Save"
-                                                                Style="{StaticResource AccentButtonStyle}"
-                                                                Click="{x:Bind SaveCommand}"/>
-                                                    </StackPanel>
-                                                </Flyout>
-                                            </Button.Flyout>
-                                        </Button>
+                                    <StackPanel Grid.Column="3" VerticalAlignment="Center" Spacing="2">
+                                        <StackPanel Orientation="Horizontal" Spacing="6">
+                                            <Button Content="Launch"
+                                                    Style="{StaticResource AccentButtonStyle}"
+                                                    Click="{x:Bind Launch}"
+                                                    Visibility="{x:Bind ShowLaunch, Mode=OneWay, Converter={StaticResource BoolToVisibility}}"/>
+                                            <Button Padding="6,4,6,4"
+                                                    VerticalAlignment="Center"
+                                                    ToolTipService.ToolTip="Set the launch command for this source">
+                                                <FontIcon Glyph="&#xE713;" FontSize="14"/>
+                                                <Button.Flyout>
+                                                    <Flyout Placement="Left">
+                                                        <StackPanel Width="380" Spacing="8">
+                                                            <TextBlock FontWeight="SemiBold">
+                                                                <Run Text="Launch command for"/>
+                                                                <Run Text="{x:Bind Name}"/>
+                                                            </TextBlock>
+                                                            <TextBox Text="{x:Bind LaunchCommand, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                                                     PlaceholderText="C:\path\to\app.exe  -or-  steam://rungameid/..."
+                                                                     FontFamily="Consolas" FontSize="12"/>
+                                                            <TextBlock Text="Quotes around paths with spaces are optional; anything after the path is passed as arguments. Clear the box to remove the button."
+                                                                       FontSize="11"
+                                                                       Foreground="{ThemeResource TextFillColorTertiaryBrush}"
+                                                                       TextWrapping="Wrap"/>
+                                                            <Button Content="Save"
+                                                                    Style="{StaticResource AccentButtonStyle}"
+                                                                    Click="{x:Bind SaveCommand}"/>
+                                                            <ToggleSwitch Header="Launch with VRCFaceTracking"
+                                                                          OnContent="Starts when VRCFT starts"
+                                                                          OffContent="Manual only"
+                                                                          MinWidth="0"
+                                                                          IsOn="{x:Bind AutoLaunch, Mode=TwoWay}"/>
+                                                        </StackPanel>
+                                                    </Flyout>
+                                                </Button.Flyout>
+                                            </Button>
+                                        </StackPanel>
+                                        <TextBlock Text="auto-launch"
+                                                   FontSize="10"
+                                                   HorizontalAlignment="Center"
+                                                   Foreground="{ThemeResource TextFillColorTertiaryBrush}"
+                                                   Visibility="{x:Bind AutoLaunch, Mode=OneWay, Converter={StaticResource BoolToVisibility}}"/>
                                     </StackPanel>
                                 </Grid>
                             </DataTemplate>

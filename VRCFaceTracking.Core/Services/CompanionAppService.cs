@@ -18,11 +18,14 @@ namespace VRCFaceTracking.Core.Services;
 public class CompanionAppService
 {
     private const string CommandsSettingKey = "CompanionAppCommands";
+    private const string AutoLaunchSettingKey = "CompanionAppAutoLaunch";
 
     private readonly ILocalSettingsService _localSettingsService;
+    private readonly TrackingSourceDetector? _detector;
     private readonly ILogger<CompanionAppService>? _logger;
 
     private Dictionary<string, string> _commands = new(StringComparer.OrdinalIgnoreCase);
+    private Dictionary<string, bool> _autoLaunch = new(StringComparer.OrdinalIgnoreCase);
     private bool _initialized;
 
     /// <summary>
@@ -37,9 +40,11 @@ public class CompanionAppService
 
     public CompanionAppService(
         ILocalSettingsService localSettingsService,
+        TrackingSourceDetector? detector = null,
         ILogger<CompanionAppService>? logger = null)
     {
         _localSettingsService = localSettingsService;
+        _detector = detector;
         _logger = logger;
     }
 
@@ -61,6 +66,16 @@ public class CompanionAppService
                     _commands = new Dictionary<string, string>(parsed, StringComparer.OrdinalIgnoreCase);
                 }
             }
+
+            var rawAuto = await _localSettingsService.ReadSettingAsync<string>(AutoLaunchSettingKey);
+            if (!string.IsNullOrWhiteSpace(rawAuto))
+            {
+                var parsed = JsonConvert.DeserializeObject<Dictionary<string, bool>>(rawAuto);
+                if (parsed != null)
+                {
+                    _autoLaunch = new Dictionary<string, bool>(parsed, StringComparer.OrdinalIgnoreCase);
+                }
+            }
         }
         catch (Exception e)
         {
@@ -68,6 +83,71 @@ public class CompanionAppService
         }
 
         _initialized = true;
+    }
+
+    public bool GetAutoLaunch(string sourceName) =>
+        _autoLaunch.TryGetValue(sourceName, out var enabled) && enabled;
+
+    public void SetAutoLaunch(string sourceName, bool enabled)
+    {
+        if (enabled)
+        {
+            _autoLaunch[sourceName] = true;
+        }
+        else
+        {
+            _autoLaunch.Remove(sourceName);
+        }
+
+        _ = PersistAsync();
+    }
+
+    /// <summary>
+    /// Starts every companion app marked "launch with VRCFT" whose source isn't already
+    /// live. Called once during app startup; idempotent by construction (already-running
+    /// apps are skipped), so watchdog relaunches after a crash never spawn duplicates.
+    /// </summary>
+    public int LaunchConfiguredAtStartup()
+    {
+        // One forced scan up front so the skip decisions see current reality.
+        var statuses = _detector?.Scan(force: true);
+        var launched = 0;
+
+        foreach (var source in TrackingSourceDetector.KnownSources)
+        {
+            if (!GetAutoLaunch(source.Name) || !IsConfigured(source.Name))
+            {
+                continue;
+            }
+
+            var detected = statuses?.FirstOrDefault(s => s.Name == source.Name)?.Detected ?? false;
+            if (detected)
+            {
+                _logger?.LogInformation("Companion app for {source} already running - not launching", source.Name);
+                continue;
+            }
+
+            var (started, message) = Launch(source.Name);
+            if (started)
+            {
+                launched++;
+            }
+            else
+            {
+                _logger?.LogWarning("Auto-launch for {source} did not start: {message}", source.Name, message);
+            }
+        }
+
+        if (launched > 0)
+        {
+            // Exe processes exist the moment Process.Start returns; refresh the detector
+            // cache so the module start decisions that follow see them. (Steam URIs can
+            // take longer than this - those sources may need one re-initialise.)
+            _detector?.Scan(force: true);
+            _logger?.LogInformation("Auto-launched {count} companion app(s)", launched);
+        }
+
+        return launched;
     }
 
     public string GetCommand(string sourceName)
@@ -203,6 +283,7 @@ public class CompanionAppService
         try
         {
             await _localSettingsService.SaveSettingAsync(CommandsSettingKey, JsonConvert.SerializeObject(_commands));
+            await _localSettingsService.SaveSettingAsync(AutoLaunchSettingKey, JsonConvert.SerializeObject(_autoLaunch));
         }
         catch (Exception e)
         {

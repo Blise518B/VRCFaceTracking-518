@@ -47,11 +47,15 @@ public partial class SourceRow : ObservableObject
     /// <summary>One-line feedback under the evidence text ("launching...", errors).</summary>
     [ObservableProperty] private string _launchStatus = string.Empty;
 
+    /// <summary>Start this app automatically when VRCFaceTracking starts.</summary>
+    [ObservableProperty] private bool _autoLaunch;
+
     public bool ShowLaunch => !Detected && !string.IsNullOrWhiteSpace(LaunchCommand);
     public bool HasLaunchStatus => !string.IsNullOrWhiteSpace(LaunchStatus);
 
     partial void OnLaunchCommandChanged(string value) => OnPropertyChanged(nameof(ShowLaunch));
     partial void OnLaunchStatusChanged(string value) => OnPropertyChanged(nameof(HasLaunchStatus));
+    partial void OnAutoLaunchChanged(bool value) => _owner.SetRowAutoLaunch(this, value);
 
     public void Launch() => _owner.LaunchRow(this);
 
@@ -113,6 +117,17 @@ public partial class SourcesViewModel : ObservableRecipient
             : "launch command saved";
     }
 
+    public void SetRowAutoLaunch(SourceRow row, bool enabled)
+    {
+        // Refresh() re-seeds AutoLaunch from the service; only user changes persist.
+        if (_companions.GetAutoLaunch(row.Name) == enabled)
+        {
+            return;
+        }
+
+        _companions.SetAutoLaunch(row.Name, enabled);
+    }
+
     private void ScheduleRefresh(int delayMs)
     {
         _ = Task.Delay(delayMs).ContinueWith(_ => _dispatcher?.TryEnqueue(Refresh));
@@ -137,6 +152,7 @@ public partial class SourcesViewModel : ObservableRecipient
                 WeakOnly = status.WeakOnly,
             };
             row.LaunchCommand = _companions.GetCommand(status.Name);
+            row.AutoLaunch = _companions.GetAutoLaunch(status.Name);
             if (!status.Detected && previousStatus.TryGetValue(status.Name, out var old))
             {
                 row.LaunchStatus = old;
