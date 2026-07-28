@@ -132,8 +132,16 @@ public class TrackingSourceDetector
         {
             Name = "Project Babble",
             ModuleKeywords = new[] { "babble" },
-            Processes = new[] { "BabbleApp", "Babble", "babbleapp" },
-            Notes = "DIY mouth tracking; the Babble app must be open and streaming.",
+            Processes = new[] { "BabbleApp", "Babble", "babbleapp", "Baballonia", "Baballonia.Desktop" },
+            Notes = "DIY mouth (and, in the Baballonia Steam alpha, eye) tracking; the app must be open and streaming.",
+        },
+        new()
+        {
+            Name = "BrokenEye (Dream Air Tobii bridge)",
+            ModuleKeywords = new[] { "brokeneye", "dreamair", "dream air" },
+            Processes = new[] { "BrokenEye", "BrokenEyeApp" },
+            Notes = "Bridges the headset's Tobii tracker to TCP + MJPEG for the merged eye module "
+                  + "and the camera apps. Must be running and connected to the headset.",
         },
         new()
         {

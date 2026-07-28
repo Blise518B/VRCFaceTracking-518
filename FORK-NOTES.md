@@ -189,6 +189,34 @@ would be indistinguishable from a bug. Two deliberate design rules:
 
 ---
 
+## 7. Companion app launch buttons
+
+`VRCFaceTracking.Core/Services/CompanionAppService.cs`, UI on the **Sources** page
+
+Source detection tells you BrokenEye isn't running — the launch buttons fix it without
+alt-tabbing. Each tracking source row on the Sources page has a gear that stores a **launch
+command** (an exe path, optionally quoted with arguments, or a URI like
+`steam://rungameid/4091970` for Steam apps). Whenever a configured source is *not* detected,
+a **Launch** button appears; one click starts the app, and the row flips to ACTIVE as soon as
+detection sees it (the page re-scans itself a few seconds after launching).
+
+Design rules:
+
+- **Launch-only.** Nothing is monitored, restarted, or killed. Quitting an app mid-session
+  (e.g. swapping EyeTrackVR for Baballonia to A/B compare eye tracking) is never fought.
+- **Never double-starts.** If the configured exe already has a process, the button reports
+  "already running" instead of launching a second copy.
+- Exe launches get their working directory set to the exe's folder (apps like BrokenEye load
+  their config relative to the exe). URIs go through the shell, so Steam handles its own apps.
+- Commands persist in settings under `CompanionAppCommands`. "Project Babble" ships with a
+  default suggestion (the Baballonia Steam URI); everything else starts empty.
+
+Also added a **BrokenEye (Dream Air Tobii bridge)** entry to the known tracking sources
+(process names `BrokenEye`/`BrokenEyeApp`), and the Baballonia process names to the Project
+Babble entry — so both detect properly and can carry launch buttons.
+
+---
+
 ## 5. Neon518 look
 
 `VRCFaceTracking/Styles/NeonTheme.xaml` (merged last in `App.xaml`)

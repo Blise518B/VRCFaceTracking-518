@@ -56,16 +56,21 @@
                 <StackPanel>
                     <TextBlock Text="Tracking sources on this PC"
                                FontWeight="SemiBold"
-                               Foreground="{StaticResource Cat518Cyan}"
+                               Foreground="{StaticResource Cat518Cyan}"/>
+                    <TextBlock Text="The gear stores a launch command per source (exe path or steam:// URI); Launch appears whenever that source isn't running."
+                               Foreground="{ThemeResource TextFillColorTertiaryBrush}"
+                               FontSize="11"
+                               TextWrapping="Wrap"
                                Margin="0,0,0,8"/>
                     <ItemsControl ItemsSource="{x:Bind ViewModel.Sources, Mode=OneWay}">
                         <ItemsControl.ItemTemplate>
-                            <DataTemplate x:DataType="services:TrackingSourceStatus">
+                            <DataTemplate x:DataType="vm:SourceRow">
                                 <Grid Padding="0,4,0,4">
                                     <Grid.ColumnDefinitions>
                                         <ColumnDefinition Width="80"/>
                                         <ColumnDefinition Width="2*" MinWidth="150"/>
                                         <ColumnDefinition Width="3*"/>
+                                        <ColumnDefinition Width="Auto"/>
                                     </Grid.ColumnDefinitions>
 
                                     <Border CornerRadius="9" Padding="7,1,7,1"
@@ -98,7 +103,7 @@
                                                TextWrapping="Wrap"
                                                VerticalAlignment="Center"
                                                Margin="0,0,10,0"/>
-                                    <StackPanel Grid.Column="2" VerticalAlignment="Center">
+                                    <StackPanel Grid.Column="2" VerticalAlignment="Center" Margin="0,0,10,0">
                                         <TextBlock Text="{x:Bind Evidence}"
                                                    FontFamily="Consolas" FontSize="11"
                                                    Foreground="{ThemeResource TextFillColorSecondaryBrush}"
@@ -107,6 +112,44 @@
                                                    FontSize="11"
                                                    Foreground="{ThemeResource TextFillColorTertiaryBrush}"
                                                    TextWrapping="Wrap"/>
+                                        <TextBlock Text="{x:Bind LaunchStatus, Mode=OneWay}"
+                                                   FontSize="11"
+                                                   Foreground="{StaticResource Cat518Green}"
+                                                   TextWrapping="Wrap"
+                                                   Visibility="{x:Bind HasLaunchStatus, Mode=OneWay, Converter={StaticResource BoolToVisibility}}"/>
+                                    </StackPanel>
+
+                                    <StackPanel Grid.Column="3" Orientation="Horizontal"
+                                                Spacing="6" VerticalAlignment="Center">
+                                        <Button Content="Launch"
+                                                Style="{StaticResource AccentButtonStyle}"
+                                                Click="{x:Bind Launch}"
+                                                Visibility="{x:Bind ShowLaunch, Mode=OneWay, Converter={StaticResource BoolToVisibility}}"/>
+                                        <Button Padding="6,4,6,4"
+                                                VerticalAlignment="Center"
+                                                ToolTipService.ToolTip="Set the launch command for this source">
+                                            <FontIcon Glyph="&#xE713;" FontSize="14"/>
+                                            <Button.Flyout>
+                                                <Flyout Placement="Left">
+                                                    <StackPanel Width="380" Spacing="8">
+                                                        <TextBlock FontWeight="SemiBold">
+                                                            <Run Text="Launch command for"/>
+                                                            <Run Text="{x:Bind Name}"/>
+                                                        </TextBlock>
+                                                        <TextBox Text="{x:Bind LaunchCommand, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                                                 PlaceholderText="C:\path\to\app.exe  -or-  steam://rungameid/..."
+                                                                 FontFamily="Consolas" FontSize="12"/>
+                                                        <TextBlock Text="Quotes around paths with spaces are optional; anything after the path is passed as arguments. Clear the box to remove the button."
+                                                                   FontSize="11"
+                                                                   Foreground="{ThemeResource TextFillColorTertiaryBrush}"
+                                                                   TextWrapping="Wrap"/>
+                                                        <Button Content="Save"
+                                                                Style="{StaticResource AccentButtonStyle}"
+                                                                Click="{x:Bind SaveCommand}"/>
+                                                    </StackPanel>
+                                                </Flyout>
+                                            </Button.Flyout>
+                                        </Button>
                                     </StackPanel>
                                 </Grid>
                             </DataTemplate>

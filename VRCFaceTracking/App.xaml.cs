@@ -147,6 +147,7 @@ public partial class App : Application
             services.AddSingleton<CrashReportService>();
             services.AddSingleton<TrackingSourceDetector>();
             services.AddSingleton<ModuleActivationService>();
+            services.AddSingleton<CompanionAppService>();
             services.AddSingleton<OscRouterClient>();
             services.AddTransient<GithubService>();
 
@@ -237,6 +238,9 @@ public partial class App : Application
         // Must load before ActivationService reaches _libManager.Initialize(), since that's
         // where the per-module start decisions get applied
         await App.GetService<ModuleActivationService>().InitializeAsync();
+
+        // Companion app launch commands for the Sources page buttons
+        await App.GetService<CompanionAppService>().InitializeAsync();
 
         // 518 OSC Fallback Standard client: receives VRChat's stream via OSC Router 518
         // when VRChat's own discovery can no longer see us (dead after long sessions)
