@@ -208,14 +208,21 @@ Design rules:
   "already running" instead of launching a second copy.
 - Exe launches get their working directory set to the exe's folder (apps like BrokenEye load
   their config relative to the exe). URIs go through the shell, so Steam handles its own apps.
-- Commands persist in settings under `CompanionAppCommands`. "Project Babble" ships with a
-  default suggestion (the Baballonia Steam URI); everything else starts empty.
+- Commands persist in settings under `CompanionAppCommands`. Defaults until overridden:
+  Project Babble = the Baballonia Steam URI, BrokenEye and EyeTrackVR = this machine's
+  installs (path defaults only apply while the file actually exists, so they vanish cleanly
+  on another PC instead of showing a broken button). A **Browse...** button in the flyout
+  picks exe/bat/lnk files without path-pasting.
+- Process detection supports a trailing `*` for prefix matches — BrokenEye's release exes
+  carry the version in the name (`BrokenEye_v1.4.0.exe`), so its source entry uses
+  `BrokenEye*` and survives updates.
 
 ### Startup auto-launch
 
 Each source's gear flyout also has a **"Launch with VRCFaceTracking"** toggle (persisted under
-`CompanionAppAutoLaunch`). At app startup, every source with the toggle on and a command
-configured is started — unless detection already sees it running. Combined with the SteamVR
+`CompanionAppAutoLaunch`). BrokenEye and EyeTrackVR default to **on** (they are required for
+Dream Air eye tracking); everything else defaults to off. At app startup, every source with
+the toggle on and a command configured is started — unless detection already sees it running. Combined with the SteamVR
 launch-mode switch, one action brings up the whole stack: SteamVR → VRCFT → BrokenEye + camera
 apps → modules auto-activate.
 

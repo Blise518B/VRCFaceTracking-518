@@ -143,9 +143,13 @@
                                                                        FontSize="11"
                                                                        Foreground="{ThemeResource TextFillColorTertiaryBrush}"
                                                                        TextWrapping="Wrap"/>
-                                                            <Button Content="Save"
-                                                                    Style="{StaticResource AccentButtonStyle}"
-                                                                    Click="{x:Bind SaveCommand}"/>
+                                                            <StackPanel Orientation="Horizontal" Spacing="8">
+                                                                <Button Content="Save"
+                                                                        Style="{StaticResource AccentButtonStyle}"
+                                                                        Click="{x:Bind SaveCommand}"/>
+                                                                <Button Content="Browse..."
+                                                                        Click="{x:Bind Browse}"/>
+                                                            </StackPanel>
                                                             <ToggleSwitch Header="Launch with VRCFaceTracking"
                                                                           OnContent="Starts when VRCFT starts"
                                                                           OffContent="Manual only"

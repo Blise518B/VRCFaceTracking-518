@@ -19,6 +19,11 @@ public class TrackingSourceDetector
     private static readonly TimeSpan CacheLifetime = TimeSpan.FromSeconds(5);
     private static readonly TimeSpan UdpProbeWindow = TimeSpan.FromMilliseconds(250);
 
+    /// <summary>Source names referenced from other services (companion app defaults).</summary>
+    public const string EtvrSourceName = "EyeTrackVR (ETVR)";
+    public const string BrokenEyeSourceName = "BrokenEye (Dream Air Tobii bridge)";
+    public const string BabbleSourceName = "Project Babble";
+
     /// <summary>A thing that can feed tracking data, and how to recognise it.</summary>
     public sealed class TrackingSource
     {
@@ -27,7 +32,11 @@ public class TrackingSourceDetector
         /// <summary>Substrings matched against a module's name, dll and path.</summary>
         public required string[] ModuleKeywords { get; init; }
 
-        /// <summary>Process names (without .exe) that mean this source is up.</summary>
+        /// <summary>
+        /// Process names (without .exe) that mean this source is up. A trailing *
+        /// matches by prefix - "BrokenEye*" catches BrokenEye_v1.4.0 and whatever
+        /// version comes next.
+        /// </summary>
         public string[] Processes { get; init; } = Array.Empty<string>();
 
         /// <summary>Memory-mapped file names that exist while this source is streaming.</summary>
@@ -114,7 +123,7 @@ public class TrackingSourceDetector
         },
         new()
         {
-            Name = "EyeTrackVR (ETVR)",
+            Name = EtvrSourceName,
             ModuleKeywords = new[] { "etvr", "eyetrack" },
             Processes = new[] { "EyeTrackApp", "eyetrackvr", "ETVR", "eyetrackapp" },
             Notes = "DIY eye tracking; the EyeTrackVR app must be open and streaming.",
@@ -130,16 +139,17 @@ public class TrackingSourceDetector
         },
         new()
         {
-            Name = "Project Babble",
+            Name = BabbleSourceName,
             ModuleKeywords = new[] { "babble" },
             Processes = new[] { "BabbleApp", "Babble", "babbleapp", "Baballonia", "Baballonia.Desktop" },
             Notes = "DIY mouth (and, in the Baballonia Steam alpha, eye) tracking; the app must be open and streaming.",
         },
         new()
         {
-            Name = "BrokenEye (Dream Air Tobii bridge)",
+            Name = BrokenEyeSourceName,
             ModuleKeywords = new[] { "brokeneye", "dreamair", "dream air" },
-            Processes = new[] { "BrokenEye", "BrokenEyeApp" },
+            // Release exes carry the version in the name (BrokenEye_v1.4.0.exe).
+            Processes = new[] { "BrokenEye*", "Broken Eye*" },
             Notes = "Bridges the headset's Tobii tracker to TCP + MJPEG for the merged eye module "
                   + "and the camera apps. Must be running and connected to the headset.",
         },
@@ -205,7 +215,11 @@ public class TrackingSourceDetector
                 {
                     foreach (var name in source.Processes)
                     {
-                        if (runningProcesses.Contains(name.Replace(".exe", string.Empty)))
+                        var wanted = name.Replace(".exe", string.Empty);
+                        var hit = wanted.EndsWith('*')
+                            ? runningProcesses.Any(p => p.StartsWith(wanted[..^1], StringComparison.OrdinalIgnoreCase))
+                            : runningProcesses.Contains(wanted);
+                        if (hit)
                         {
                             evidence.Add($"process {name}");
                         }

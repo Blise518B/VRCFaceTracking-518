@@ -60,6 +60,8 @@ public partial class SourceRow : ObservableObject
     public void Launch() => _owner.LaunchRow(this);
 
     public void SaveCommand() => _owner.SaveRowCommand(this);
+
+    public void Browse() => _owner.BrowseRowCommand(this);
 }
 
 public partial class SourcesViewModel : ObservableRecipient
@@ -126,6 +128,34 @@ public partial class SourcesViewModel : ObservableRecipient
         }
 
         _companions.SetAutoLaunch(row.Name, enabled);
+    }
+
+    public async void BrowseRowCommand(SourceRow row)
+    {
+        try
+        {
+            var picker = new Windows.Storage.Pickers.FileOpenPicker
+            {
+                SuggestedStartLocation = Windows.Storage.Pickers.PickerLocationId.ComputerFolder,
+            };
+            picker.FileTypeFilter.Add(".exe");
+            picker.FileTypeFilter.Add(".bat");
+            picker.FileTypeFilter.Add(".cmd");
+            picker.FileTypeFilter.Add(".lnk");
+            WinRT.Interop.InitializeWithWindow.Initialize(picker,
+                WinRT.Interop.WindowNative.GetWindowHandle(App.MainWindow));
+
+            var file = await picker.PickSingleFileAsync();
+            if (file != null)
+            {
+                row.LaunchCommand = file.Path;
+                SaveRowCommand(row);
+            }
+        }
+        catch (Exception)
+        {
+            row.LaunchStatus = "file picker failed - paste the path instead";
+        }
     }
 
     private void ScheduleRefresh(int delayMs)

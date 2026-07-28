@@ -31,12 +31,27 @@ public class CompanionAppService
     /// <summary>
     /// Suggestions shown until the user sets their own command. Steam apps launch
     /// through their store URI so Steam handles the working directory and updates.
+    /// Path defaults are this machine's installs and only apply while the file
+    /// exists, so they disappear cleanly instead of showing a broken button.
     /// </summary>
     private static readonly IReadOnlyDictionary<string, string> Defaults =
         new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
         {
-            { "Project Babble", "steam://rungameid/4091970" },
+            { TrackingSourceDetector.BabbleSourceName, "steam://rungameid/4091970" },
+            { TrackingSourceDetector.BrokenEyeSourceName, @"C:\DIY-Projects\VRC-Coding\PimaxEyeTracking\Brokeneye1.4\BrokenEye_v1.4.0.exe" },
+            { TrackingSourceDetector.EtvrSourceName, @"C:\DIY-Projects\VRC-Coding\PimaxEyeTracking\EyeTrackVR\eyetrackapp.exe" },
         };
+
+    /// <summary>
+    /// Sources that auto-launch unless the user turns their toggle off. These two are
+    /// required for eye tracking on the Dream Air, so a fresh setup gets the whole
+    /// stack from one VRCFT start.
+    /// </summary>
+    private static readonly string[] AutoLaunchByDefault =
+    {
+        TrackingSourceDetector.BrokenEyeSourceName,
+        TrackingSourceDetector.EtvrSourceName,
+    };
 
     public CompanionAppService(
         ILocalSettingsService localSettingsService,
@@ -85,20 +100,22 @@ public class CompanionAppService
         _initialized = true;
     }
 
-    public bool GetAutoLaunch(string sourceName) =>
-        _autoLaunch.TryGetValue(sourceName, out var enabled) && enabled;
+    public bool GetAutoLaunch(string sourceName)
+    {
+        if (_autoLaunch.TryGetValue(sourceName, out var enabled))
+        {
+            return enabled;
+        }
+
+        return AutoLaunchByDefault.Contains(sourceName, StringComparer.OrdinalIgnoreCase)
+               && IsConfigured(sourceName);
+    }
 
     public void SetAutoLaunch(string sourceName, bool enabled)
     {
-        if (enabled)
-        {
-            _autoLaunch[sourceName] = true;
-        }
-        else
-        {
-            _autoLaunch.Remove(sourceName);
-        }
-
+        // Stored explicitly (not remove-on-false) so turning a default-on
+        // source off actually sticks.
+        _autoLaunch[sourceName] = enabled;
         _ = PersistAsync();
     }
 
@@ -157,7 +174,13 @@ public class CompanionAppService
             return command;
         }
 
-        return Defaults.TryGetValue(sourceName, out var suggestion) ? suggestion : string.Empty;
+        if (Defaults.TryGetValue(sourceName, out var suggestion)
+            && (suggestion.Contains("://") || File.Exists(suggestion)))
+        {
+            return suggestion;
+        }
+
+        return string.Empty;
     }
 
     public bool IsConfigured(string sourceName) => !string.IsNullOrWhiteSpace(GetCommand(sourceName));
