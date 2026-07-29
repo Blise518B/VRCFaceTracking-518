@@ -79,6 +79,13 @@
                         <FontIcon FontFamily="{StaticResource SymbolThemeFontFamily}" Glyph="&#xE957;"/>
                     </NavigationViewItem.Icon>
                 </NavigationViewItem>
+                <NavigationViewItem Content="Tracking Debug"
+                                    ToolTipService.ToolTip="Live view of every unified expression shape: value, source, and update activity"
+                                    helpers:NavigationHelper.NavigateTo="VRCFaceTracking.ViewModels.TrackingDebugViewModel">
+                    <NavigationViewItem.Icon>
+                        <FontIcon FontFamily="{StaticResource SymbolThemeFontFamily}" Glyph="&#xEBE8;"/>
+                    </NavigationViewItem.Icon>
+                </NavigationViewItem>
             </NavigationView.MenuItems>
             <!-- An action, not a page: switches this session to the console monitor.
                  Lives in the pane because it's needed often, especially during setup. -->

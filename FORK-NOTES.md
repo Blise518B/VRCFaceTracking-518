@@ -239,6 +239,31 @@ Babble entry — so both detect properly and can carry launch buttons.
 
 ---
 
+## 8. Tracking Debug page
+
+`VRCFaceTracking/Views/TrackingDebugPage.xaml` + `ViewModels/TrackingDebugViewModel.cs`
+
+A **Tracking Debug** entry in the nav pane: a live table of every tracking value —
+eight eye signals (per-eye gaze X/Y, openness, pupil mm) and all 88 unified expression
+shapes. Per row: a bar, the **raw** value (what the module wrote), the **mut** value
+(after Tracking Mutations / curves — so you can also see what your curves are doing),
+the **source**, and how long ago it last changed (amber dot = moved in the last 0.4 s).
+Filter box + "only moving" checkbox cut the list down while making a face. Refreshes at
+10 Hz, only while the page is on screen.
+
+Source attribution has two levels:
+
+- **Slot owners** (always available): which module owns the eye slot and which owns the
+  expression slot, straight from the lib manager.
+- **Fine-grained routing** (when the DreamAir518 module runs): the sandboxed module
+  can't be inspected from the app, so it publishes `DreamAirRouting.json` next to its
+  DLL (rewritten 4×/s) with its internal routing — gaze=Tobii/fallback, lids/shapes=
+  ETVR or Babble with message rates, pupil source, face-relay state. The page picks the
+  file up from CustomLibs, treats it as stale after 3 s, and labels the eye-range rows
+  with the true per-signal source.
+
+---
+
 ## 5. Neon518 look
 
 `VRCFaceTracking/Styles/NeonTheme.xaml` (merged last in `App.xaml`)

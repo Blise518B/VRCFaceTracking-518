@@ -162,6 +162,8 @@ public partial class App : Application
             // Singleton so open curve editors survive navigating away and back
             services.AddSingleton<CurvesViewModel>();
             services.AddTransient<CurvesPage>();
+            services.AddSingleton<TrackingDebugViewModel>();
+            services.AddTransient<TrackingDebugPage>();
             services.AddTransient<SourcesViewModel>();
             services.AddTransient<SourcesPage>();
             services.AddTransient<OutputViewModel>();
