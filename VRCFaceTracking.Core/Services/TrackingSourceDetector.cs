@@ -85,9 +85,14 @@ public class TrackingSourceDetector
         {
             Name = "Virtual Desktop",
             ModuleKeywords = new[] { "virtualdesktop", "vdesktop", "vdxr" },
-            Processes = new[] { "VirtualDesktop.Streamer", "VirtualDesktop.Server", "VirtualDesktop.Service" },
-            MemoryMappedFiles = new[] { "VirtualDesktop.FaceState", "VirtualDesktop.FaceTracking", "VirtualDesktop.BodyState" },
-            Notes = "Quest Pro / Pico face and eye tracking streamed over Virtual Desktop.",
+            // Deliberately NO process evidence: the Streamer/Service run from Windows
+            // startup whenever VD is installed, which made this source permanently
+            // "detected" and let its module steal the eye slot from real hardware
+            // (measured live with a Dream Air + Tobii). Only the face-tracking shared
+            // memory proves a face-capable headset is actually streaming.
+            MemoryMappedFiles = new[] { "VirtualDesktop.FaceState", "VirtualDesktop.FaceTracking" },
+            Notes = "Quest Pro / Pico face and eye tracking streamed over Virtual Desktop. Detected "
+                  + "only while face data is actually streaming (not merely because VD is installed).",
         },
         new()
         {
