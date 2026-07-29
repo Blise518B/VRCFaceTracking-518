@@ -75,9 +75,31 @@ public partial class TrackingDebugViewModel : ObservableRecipient
     [ObservableProperty] private string _slotSummary = "-";
     [ObservableProperty] private string _routingSummary = "-";
 
-    private sealed record RoutingSnapshot(
-        string Module, string Gaze, string Lids, string Shapes, string Pupil, string Relay,
-        int TobiiFps, int EtvrRate, int BabbleRate, long TimestampMs);
+    // The big expression-source badge + switch. Mode is what's configured
+    // (auto/etvr/babble); the badge shows what is ACTUALLY driving right now.
+    [ObservableProperty] private bool _etvrActive;
+    [ObservableProperty] private bool _babbleActive;
+    [ObservableProperty] private bool _sourceUnknown = true;
+    [ObservableProperty] private int _modeIndex; // 0 auto, 1 etvr, 2 babble
+    [ObservableProperty] private bool _switchAvailable;
+    private bool _suppressModeSend;
+    private long _modeSendGraceUntil;
+
+    private sealed class RoutingSnapshot
+    {
+        public string Module { get; set; } = "";
+        public string Gaze { get; set; } = "";
+        public string Lids { get; set; } = "";
+        public string Shapes { get; set; } = "";
+        public string Pupil { get; set; } = "";
+        public string Relay { get; set; } = "";
+        public int TobiiFps { get; set; }
+        public int EtvrRate { get; set; }
+        public int BabbleRate { get; set; }
+        public long TimestampMs { get; set; }
+        public string Mode { get; set; } = "auto";
+        public string ActiveSource { get; set; } = "";
+    }
 
     public TrackingDebugViewModel()
     {
@@ -93,6 +115,81 @@ public partial class TrackingDebugViewModel : ObservableRecipient
 
     partial void OnFilterChanged(string value) => ApplyVisibility();
     partial void OnOnlyMovingChanged(bool value) => ApplyVisibility();
+
+    partial void OnModeIndexChanged(int value)
+    {
+        if (_suppressModeSend)
+        {
+            return;
+        }
+
+        var mode = value switch { 1 => "etvr", 2 => "babble", _ => "auto" };
+        // The routing file lags the command by up to ~500 ms; don't let a
+        // stale read snap the selector back while the module catches up.
+        _modeSendGraceUntil = Environment.TickCount64 + 2000;
+        SendExpressionSourceCommand(mode);
+    }
+
+    /// <summary>
+    /// Flips the module's ExpressionSource at runtime over its own OSC command
+    /// channel (/command/set/ExpressionSource) - the same mechanism the ETVR
+    /// GUI uses for its settings, so no restart is involved. The module
+    /// persists the change and the routing file confirms it within ~500 ms.
+    /// </summary>
+    private void SendExpressionSourceCommand(string mode)
+    {
+        try
+        {
+            var port = ReadModulePort();
+            using var socket = new System.Net.Sockets.Socket(
+                System.Net.Sockets.AddressFamily.InterNetwork,
+                System.Net.Sockets.SocketType.Dgram,
+                System.Net.Sockets.ProtocolType.Udp);
+            socket.SendTo(
+                EncodeOscString("/command/set/ExpressionSource", mode),
+                new System.Net.IPEndPoint(System.Net.IPAddress.Loopback, port));
+        }
+        catch (Exception)
+        {
+            // The routing file simply won't confirm; the badge stays truthful.
+        }
+    }
+
+    private int ReadModulePort()
+    {
+        try
+        {
+            var dir = Path.GetDirectoryName(_routingFilePath);
+            var configPath = dir is null ? null : Path.Combine(dir, "ETVRModuleConfig.json");
+            if (configPath is not null && File.Exists(configPath))
+            {
+                using var doc = JsonDocument.Parse(File.ReadAllText(configPath));
+                if (doc.RootElement.TryGetProperty("PortNumber", out var port))
+                {
+                    return port.GetInt32();
+                }
+            }
+        }
+        catch (Exception)
+        {
+        }
+        return 8889;
+    }
+
+    private static byte[] EncodeOscString(string address, string value)
+    {
+        static byte[] Pad(byte[] raw)
+        {
+            var padded = new byte[(raw.Length + 1 + 3) & ~3];
+            Array.Copy(raw, padded, raw.Length);
+            return padded;
+        }
+
+        var a = Pad(System.Text.Encoding.ASCII.GetBytes(address));
+        var t = Pad(System.Text.Encoding.ASCII.GetBytes(",s"));
+        var v = Pad(System.Text.Encoding.ASCII.GetBytes(value));
+        return a.Concat(t).Concat(v).ToArray();
+    }
 
     public void Start()
     {
@@ -243,6 +340,25 @@ public partial class TrackingDebugViewModel : ObservableRecipient
             : $"{_routing.Module}:  gaze = {_routing.Gaze}   |   lids = {_routing.Lids}   |   " +
               $"shapes = {_routing.Shapes} (ETVR {_routing.EtvrRate}/s, Babble {_routing.BabbleRate}/s)   |   " +
               $"pupil = {_routing.Pupil}   |   relay = {_routing.Relay}";
+
+        // Badge + switch state. The switch needs a module new enough to
+        // publish Mode/ActiveSource; older files leave ActiveSource empty.
+        var known = _routing is not null && _routing.ActiveSource.Length > 0;
+        SourceUnknown = !known;
+        EtvrActive = known && _routing!.ActiveSource == "etvr";
+        BabbleActive = known && _routing!.ActiveSource == "babble";
+        SwitchAvailable = known;
+
+        if (known && Environment.TickCount64 >= _modeSendGraceUntil)
+        {
+            var fileMode = _routing!.Mode switch { "etvr" => 1, "babble" => 2, _ => 0 };
+            if (fileMode != ModeIndex)
+            {
+                _suppressModeSend = true;
+                ModeIndex = fileMode;
+                _suppressModeSend = false;
+            }
+        }
     }
 
     private void RefreshRouting(long now)

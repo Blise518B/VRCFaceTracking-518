@@ -262,6 +262,16 @@ Source attribution has two levels:
   file up from CustomLibs, treats it as stale after 3 s, and labels the eye-range rows
   with the true per-signal source.
 
+### Expression source switch
+
+The page tops out with a big **EYE EXPRESSIONS: ETVR** (cyan) / **BABBLE** (yellow)
+badge showing what is *actually* driving right now, plus an Auto / ETVR / Babble
+selector. Switching sends `/command/set/ExpressionSource` over the module's own OSC
+command channel (the same mechanism ETVR's GUI uses for settings), so the change is
+instant, restart-free, and persisted by the module itself. The selector reflects the
+mode back from the routing file (2 s grace after a click so the lagging file can't
+snap it back); it disables itself when the module doesn't publish routing info.
+
 ---
 
 ## 5. Neon518 look

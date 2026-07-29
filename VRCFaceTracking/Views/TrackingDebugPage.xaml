@@ -21,7 +21,7 @@
                 </Grid.ColumnDefinitions>
 
                 <Ellipse Width="7" Height="7"
-                         Fill="{StaticResource Cat518Amber}"
+                         Fill="{StaticResource Cat518Yellow}"
                          VerticalAlignment="Center"
                          Visibility="{x:Bind RecentlyChanged, Mode=OneWay, Converter={StaticResource BoolToVisibility}}"/>
 
@@ -58,6 +58,67 @@
 
     <ScrollViewer VerticalScrollBarVisibility="Auto">
         <StackPanel Spacing="12" Margin="0,0,0,20">
+
+            <!-- Expression source switch : the big, unmissable one -->
+            <Border Style="{StaticResource Cat518SectionBorderStyle}"
+                    Background="{StaticResource Cat518YellowTint}"
+                    BorderBrush="{StaticResource Cat518YellowEdge}">
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="1*"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+
+                    <Border CornerRadius="10" Padding="18,10,18,10"
+                            VerticalAlignment="Center"
+                            Background="{StaticResource Cat518CyanTint}"
+                            BorderBrush="{StaticResource Cat518Cyan}"
+                            BorderThickness="2"
+                            Visibility="{x:Bind ViewModel.EtvrActive, Mode=OneWay, Converter={StaticResource BoolToVisibility}}">
+                        <TextBlock Text="EYE EXPRESSIONS: ETVR"
+                                   FontSize="20" FontWeight="Bold"
+                                   Foreground="{StaticResource Cat518Cyan}"/>
+                    </Border>
+                    <Border CornerRadius="10" Padding="18,10,18,10"
+                            VerticalAlignment="Center"
+                            Background="{StaticResource Cat518YellowTint}"
+                            BorderBrush="{StaticResource Cat518Yellow}"
+                            BorderThickness="2"
+                            Visibility="{x:Bind ViewModel.BabbleActive, Mode=OneWay, Converter={StaticResource BoolToVisibility}}">
+                        <TextBlock Text="EYE EXPRESSIONS: BABBLE"
+                                   FontSize="20" FontWeight="Bold"
+                                   Foreground="{StaticResource Cat518Yellow}"/>
+                    </Border>
+                    <Border CornerRadius="10" Padding="18,10,18,10"
+                            VerticalAlignment="Center"
+                            BorderBrush="{ThemeResource TextFillColorTertiaryBrush}"
+                            BorderThickness="2"
+                            Visibility="{x:Bind ViewModel.SourceUnknown, Mode=OneWay, Converter={StaticResource BoolToVisibility}}">
+                        <TextBlock Text="EYE EXPRESSIONS: ?"
+                                   FontSize="20" FontWeight="Bold"
+                                   Foreground="{ThemeResource TextFillColorTertiaryBrush}"/>
+                    </Border>
+
+                    <StackPanel Grid.Column="2" VerticalAlignment="Center">
+                        <TextBlock Text="Source mode"
+                                   FontSize="11"
+                                   Foreground="{ThemeResource TextFillColorTertiaryBrush}"
+                                   Margin="0,0,0,2"/>
+                        <RadioButtons SelectedIndex="{x:Bind ViewModel.ModeIndex, Mode=TwoWay}"
+                                      IsEnabled="{x:Bind ViewModel.SwitchAvailable, Mode=OneWay}"
+                                      MaxColumns="3">
+                            <RadioButton Content="Auto" MinWidth="0"/>
+                            <RadioButton Content="ETVR" MinWidth="0"/>
+                            <RadioButton Content="Babble" MinWidth="0"/>
+                        </RadioButtons>
+                        <TextBlock Text="Auto follows whichever app streams; ETVR/Babble pin it."
+                                   FontSize="10"
+                                   Foreground="{ThemeResource TextFillColorTertiaryBrush}"
+                                   TextWrapping="Wrap" MaxWidth="260"/>
+                    </StackPanel>
+                </Grid>
+            </Border>
 
             <!-- Routing header : green section -->
             <Border Style="{StaticResource Cat518SectionBorderStyle}"
