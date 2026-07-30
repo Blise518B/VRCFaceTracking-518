@@ -124,6 +124,7 @@
                                             <Button Content="Launch"
                                                     Style="{StaticResource AccentButtonStyle}"
                                                     Click="{x:Bind Launch}"
+                                                    IsEnabled="{x:Bind CanLaunch, Mode=OneWay}"
                                                     Visibility="{x:Bind ShowLaunch, Mode=OneWay, Converter={StaticResource BoolToVisibility}}"/>
                                             <Button Padding="6,4,6,4"
                                                     VerticalAlignment="Center"

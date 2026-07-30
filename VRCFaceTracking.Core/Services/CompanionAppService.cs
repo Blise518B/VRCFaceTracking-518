@@ -185,6 +185,23 @@ public class CompanionAppService
 
     public bool IsConfigured(string sourceName) => !string.IsNullOrWhiteSpace(GetCommand(sourceName));
 
+    /// <summary>
+    /// The sources worth showing on the Utilities page: anything the user has
+    /// given a command, plus the ones we ship a default for. Deliberately not
+    /// every known source - a launcher listing SRanipal and Virtual Desktop
+    /// with no command would be noise.
+    /// </summary>
+    public IEnumerable<string> LaunchableSourceNames()
+    {
+        foreach (var source in TrackingSourceDetector.KnownSources)
+        {
+            if (IsConfigured(source.Name) || Defaults.ContainsKey(source.Name))
+            {
+                yield return source.Name;
+            }
+        }
+    }
+
     public void SetCommand(string sourceName, string? command)
     {
         if (string.IsNullOrWhiteSpace(command))

@@ -23,6 +23,7 @@ public class PageService : IPageService
         Configure<CurvesViewModel, CurvesPage>();
         Configure<SourcesViewModel, SourcesPage>();
         Configure<TrackingDebugViewModel, TrackingDebugPage>();
+        Configure<UtilitiesViewModel, UtilitiesPage>();
     }
 
     public Type GetPageType(string key)

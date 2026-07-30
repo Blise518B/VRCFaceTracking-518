@@ -50,10 +50,20 @@ public partial class SourceRow : ObservableObject
     /// <summary>Start this app automatically when VRCFaceTracking starts.</summary>
     [ObservableProperty] private bool _autoLaunch;
 
-    public bool ShowLaunch => !Detected && !string.IsNullOrWhiteSpace(LaunchCommand);
+    /// <summary>
+    /// Shown whenever we know how to start this source - NOT only while it is
+    /// missing. A button that hides itself once the app is running is a button
+    /// nobody can find in the first place; it is disabled instead.
+    /// </summary>
+    public bool ShowLaunch => !string.IsNullOrWhiteSpace(LaunchCommand);
+    public bool CanLaunch => !Detected && !string.IsNullOrWhiteSpace(LaunchCommand);
     public bool HasLaunchStatus => !string.IsNullOrWhiteSpace(LaunchStatus);
 
-    partial void OnLaunchCommandChanged(string value) => OnPropertyChanged(nameof(ShowLaunch));
+    partial void OnLaunchCommandChanged(string value)
+    {
+        OnPropertyChanged(nameof(ShowLaunch));
+        OnPropertyChanged(nameof(CanLaunch));
+    }
     partial void OnLaunchStatusChanged(string value) => OnPropertyChanged(nameof(HasLaunchStatus));
     partial void OnAutoLaunchChanged(bool value) => _owner.SetRowAutoLaunch(this, value);
 

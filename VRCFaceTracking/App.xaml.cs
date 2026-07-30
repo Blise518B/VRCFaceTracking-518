@@ -164,6 +164,8 @@ public partial class App : Application
             services.AddTransient<CurvesPage>();
             services.AddSingleton<TrackingDebugViewModel>();
             services.AddTransient<TrackingDebugPage>();
+            services.AddSingleton<UtilitiesViewModel>();
+            services.AddTransient<UtilitiesPage>();
             services.AddTransient<SourcesViewModel>();
             services.AddTransient<SourcesPage>();
             services.AddTransient<OutputViewModel>();
