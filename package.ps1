@@ -22,12 +22,38 @@ VRCFaceTracking - 518 Edition
 ====================================
 
 Custom build of VRCFaceTracking (https://github.com/benaclejames/VRCFaceTracking, Apache 2.0)
-with extra features:
+with these additions:
 
- - Crash auto-restart: crashed tracking modules AND the app itself restart automatically
-   (toggle + statistics in Settings -> Crash Auto-Restart)
+RELIABILITY
+ - Crash auto-restart: crashed tracking modules AND the app itself restart
+   automatically (toggle + statistics in Settings -> Crash Auto-Restart)
+ - Crash reports: every crash writes a readable report to
+   Documents\VRCFaceTracking\crashes\ explaining what died and why, including
+   whether VRChat / SteamVR / SRanipal were running at the time
+
+TUNING
  - Range Calibration: per-expression floor/ceiling + sensitivity curves
    (Tracking Mutations page -> Range Calibration)
+ - Curve Editor: draw the full input/output response curve for 100 channels,
+   including eye gaze and head rotation, which no other mutation can reach.
+   Two editors side by side, with a live dot showing where your face is right
+   now - great for matching one eye's openness to the other.
+
+SETUP AND DIAGNOSIS
+ - Sources page: works out which tracking sources are actually live and starts
+   only the matching modules, so an unused module cannot grab a slot it has no
+   hardware for. Every decision comes with a readable reason.
+ - Launch buttons: store a launch command per source (an .exe or a steam:// URI)
+   and start it from the Sources page, or have it start automatically with
+   VRCFaceTracking.
+ - Tracking Debug page: a live table of all 88 unified expression shapes plus
+   the eye signals - value before and after your mutations, where each one comes
+   from, and how long ago it last moved. Filter box and an "only moving" toggle.
+
+LOOK AND EXTRAS
+ - Neon518 theme matching VRC Parameter Relay
+ - Lite Console: switch the running session to a tiny console monitor and back
+ - OSC Fallback Standard client for when VRChat's own discovery stops seeing us
 
 HOW TO RUN
 ----------
@@ -37,7 +63,11 @@ HOW TO RUN
    click "More info" -> "Run anyway". That happens because this build isn't code-signed.
 
 Your existing VRCFaceTracking settings and modules are picked up automatically
-(they live in %APPDATA%\VRCFaceTracking, not in the app folder).
+(they live in %APPDATA%\VRCFaceTracking, not in the app folder), so this build
+sits alongside a normal install rather than replacing it.
+
+Not code-signed, not affiliated with the upstream project - report problems here,
+not to the VRCFaceTracking developers.
 "@ | Set-Content (Join-Path $dst "README.txt") -Encoding utf8
 
 Write-Host "Zipping (takes a moment)..."
