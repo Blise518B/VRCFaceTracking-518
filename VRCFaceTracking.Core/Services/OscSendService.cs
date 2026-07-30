@@ -125,6 +125,11 @@ public class OscSendService
             return; // Nothing to send to yet - not an error worth throwing per tick
         }
 
+        if (OutputTap.Enabled)
+        {
+            OutputTap.Record(new[] { message });
+        }
+
         var nextByteIndex = await message.Encode(_sendBuffer, ct);
         if (nextByteIndex <= 0 || nextByteIndex > _sendBuffer.Length)
         {
@@ -144,6 +149,11 @@ public class OscSendService
         {
             WarnNotConnected();
             return;
+        }
+
+        if (OutputTap.Enabled)
+        {
+            OutputTap.Record(messages);
         }
 
         var cbt = messages.Select(m => m._meta).ToArray();

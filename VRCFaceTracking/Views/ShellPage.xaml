@@ -93,6 +93,13 @@
                         <FontIcon FontFamily="{StaticResource SymbolThemeFontFamily}" Glyph="&#xEBE8;"/>
                     </NavigationViewItem.Icon>
                 </NavigationViewItem>
+                <NavigationViewItem Content="VRChat Output"
+                                    ToolTipService.ToolTip="Ground truth: every OSC message actually sent to VRChat, recorded at the wire"
+                                    helpers:NavigationHelper.NavigateTo="VRCFaceTracking.ViewModels.VrcOutputViewModel">
+                    <NavigationViewItem.Icon>
+                        <FontIcon FontFamily="{StaticResource SymbolThemeFontFamily}" Glyph="&#xE774;"/>
+                    </NavigationViewItem.Icon>
+                </NavigationViewItem>
             </NavigationView.MenuItems>
             <!-- An action, not a page: switches this session to the console monitor.
                  Lives in the pane because it's needed often, especially during setup. -->

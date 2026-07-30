@@ -166,6 +166,8 @@ public partial class App : Application
             services.AddTransient<TrackingDebugPage>();
             services.AddSingleton<UtilitiesViewModel>();
             services.AddTransient<UtilitiesPage>();
+            services.AddSingleton<VrcOutputViewModel>();
+            services.AddTransient<VrcOutputPage>();
             services.AddTransient<SourcesViewModel>();
             services.AddTransient<SourcesPage>();
             services.AddTransient<OutputViewModel>();
