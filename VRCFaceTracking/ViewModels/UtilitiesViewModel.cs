@@ -26,7 +26,11 @@ public partial class UtilityRow : ObservableObject
 
     partial void OnIsRunningChanged(bool value)
     {
-        StatusText = value ? "running" : NeedsSetup ? "no launch command set" : "not running";
+        StatusText = value
+            ? "running"
+            : NeedsSetup
+                ? "not set up - choose the program to start"
+                : "not running";
         OnPropertyChanged(nameof(CanLaunch));
     }
 
@@ -34,6 +38,13 @@ public partial class UtilityRow : ObservableObject
     {
         OnPropertyChanged(nameof(CanLaunch));
         OnPropertyChanged(nameof(NeedsSetup));
+
+        // Status line follows setup state, otherwise a row that was just configured
+        // keeps saying "not set up" until the next status refresh.
+        if (!IsRunning)
+        {
+            StatusText = NeedsSetup ? "not set up - choose the program to start" : "not running";
+        }
     }
 
     partial void OnAutoLaunchChanged(bool value) => _owner.SetRowAutoLaunch(this, value);

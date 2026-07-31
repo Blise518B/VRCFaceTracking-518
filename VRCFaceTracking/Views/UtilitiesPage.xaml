@@ -93,10 +93,19 @@
                                                   MinWidth="0" VerticalAlignment="Center"
                                                   IsOn="{x:Bind AutoLaunch, Mode=TwoWay}"
                                                   ToolTipService.ToolTip="Start this program automatically when VRCFaceTracking starts"/>
+                                    <!-- Nothing configured yet: offer the file picker straight away
+                                         rather than a dead Launch button next to a gear icon nobody
+                                         thinks to open. Swaps back to Launch once a path is set. -->
+                                    <Button Content="Set path..."
+                                            Style="{StaticResource AccentButtonStyle}"
+                                            Click="{x:Bind Browse}"
+                                            ToolTipService.ToolTip="Pick the program to start for this source"
+                                            Visibility="{x:Bind NeedsSetup, Mode=OneWay, Converter={StaticResource BoolToVisibility}}"/>
                                     <Button Content="Launch"
                                             Style="{StaticResource AccentButtonStyle}"
                                             IsEnabled="{x:Bind CanLaunch, Mode=OneWay}"
-                                            Click="{x:Bind Launch}"/>
+                                            Click="{x:Bind Launch}"
+                                            Visibility="{x:Bind NeedsSetup, Mode=OneWay, Converter={StaticResource BoolToVisibility}, ConverterParameter=Inverse}"/>
                                     <Button Padding="6,4,6,4"
                                             ToolTipService.ToolTip="Set how this program is started">
                                         <FontIcon Glyph="&#xE713;" FontSize="14"/>
