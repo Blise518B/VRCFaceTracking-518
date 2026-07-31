@@ -4,7 +4,23 @@
     <VftUiTargetFramework>net10.0-windows10.0.22621.0</VftUiTargetFramework>
     <VftTargetPlatformVersion>10.0.22621.0</VftTargetPlatformVersion>
     <VftTargetPlatformMinVersion>10.0.17763.0</VftTargetPlatformMinVersion>
+    <!-- Upstream's assembly identity. Tracking modules bind against this, so it names
+         the upstream release this fork is based on and must NOT be reused for fork
+         versioning - bumping it can stop existing modules from loading. -->
     <AssemblyVersion>5.4.5.0</AssemblyVersion>
+    <UpstreamBaseVersion>5.4.5</UpstreamBaseVersion>
+
+    <!-- THIS FORK'S RELEASE NUMBER - the only line to change when cutting a release.
+         It names the .exe and .zip that package.ps1 produces, shows on the Settings
+         page, goes into every crash report, and is logged at startup. -->
+    <Fork518Version>1.0.0</Fork518Version>
+
+    <Version>$(Fork518Version)</Version>
+    <FileVersion>$(Fork518Version).0</FileVersion>
+    <InformationalVersion>$(Fork518Version)</InformationalVersion>
+    <Product>VRCFaceTracking 518 Edition</Product>
+    <Company>Blise518B</Company>
+
     <LangVersion>latest</LangVersion>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>

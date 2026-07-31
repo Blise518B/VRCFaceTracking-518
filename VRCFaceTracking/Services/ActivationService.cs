@@ -5,6 +5,7 @@ using Microsoft.UI.Xaml.Controls;
 
 using VRCFaceTracking.Activation;
 using VRCFaceTracking.Contracts.Services;
+using VRCFaceTracking.Core;
 using VRCFaceTracking.Core.Contracts.Services;
 using VRCFaceTracking.Core.Models;
 using VRCFaceTracking.Core.OSC;
@@ -99,7 +100,9 @@ public class ActivationService : IActivationService
     {
         await _themeSelectorService.SetRequestedThemeAsync();
         
-        _logger.LogInformation("VRCFT Version {version} initializing...", Assembly.GetExecutingAssembly().GetName().Version);
+        // Fork version, not the assembly version: the first line of a shared log must
+        // make it obvious which build produced everything below it.
+        _logger.LogInformation("VRCFaceTracking {version} initializing...", ForkVersion.Display);
         
         _logger.LogInformation("Initializing OSC...");
         await _parameterOutputService.InitializeAsync().ConfigureAwait(false);

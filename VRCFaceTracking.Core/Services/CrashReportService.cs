@@ -560,16 +560,9 @@ public class CrashReportService
         }
     }
 
-    private static string AppVersion()
-    {
-        try
-        {
-            var version = Assembly.GetEntryAssembly()?.GetName().Version;
-            return version?.ToString() ?? "unknown";
-        }
-        catch (Exception)
-        {
-            return "unknown";
-        }
-    }
+    /// <summary>
+    /// Fork release plus the upstream base, so a crash report someone pastes into a chat
+    /// can never be mistaken for one from stock VRCFaceTracking.
+    /// </summary>
+    private static string AppVersion() => ForkVersion.Display;
 }

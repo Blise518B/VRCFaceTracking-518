@@ -6,6 +6,7 @@ using Microsoft.UI.Xaml.Controls;
 using VRCFaceTracking.ViewModels;
 using Windows.System;
 using Microsoft.UI.Xaml.Media.Imaging;
+using VRCFaceTracking.Core;
 using VRCFaceTracking.Core.Contracts;
 using VRCFaceTracking.Core.Contracts.Services;
 using VRCFaceTracking.Core.Params.Data;
@@ -72,14 +73,12 @@ public sealed partial class SettingsPage : Page, INotifyPropertyChanged
         }
     }
 
-    public string Version
-    {
-        get
-        {
-            var version = System.Reflection.Assembly.GetEntryAssembly()?.GetName().Version;
-            return version != null ? $"{version.Major}.{version.Minor}.{version.Build}.{version.Revision}" : "Unknown";
-        }
-    }
+    /// <summary>
+    /// The fork's release number plus the upstream release it is based on - never the
+    /// bare assembly version, which is upstream's and would make this build look like
+    /// stock VRCFaceTracking in screenshots and bug reports.
+    /// </summary>
+    public string Version => ForkVersion.Display;
 
     public SettingsViewModel ViewModel
     {
