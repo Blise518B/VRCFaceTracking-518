@@ -5,8 +5,15 @@ are the fork's own and start at 1.0.0; they are unrelated to upstream VRCFaceTra
 version, which is recorded per release as the base it was built from.
 
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
-To cut a release: bump `<Fork518Version>` in `Directory.Build.props`, rebuild, run
-`package.ps1`, and attach the two version-stamped files from `dist\` to a GitHub release.
+
+**Cutting a release**
+1. Bump `<Fork518Version>` in `Directory.Build.props` and add a section here.
+2. Rebuild (`build.bat`), then run `package.ps1` — it refuses to package a build whose
+   stamped version disagrees with the props file.
+3. Tag as **`518-vX.Y.Z`**, not `vX.Y.Z`. This repo inherited upstream's tags
+   (`v1.0` … `v4.0.0`), so an unprefixed fork tag would collide with an existing
+   upstream one the moment the fork reaches 1.1.1, 1.2.0 or 2.0.0.
+4. Attach both version-stamped files from `dist\` to the GitHub release.
 
 ---
 
@@ -64,4 +71,4 @@ privately; it is listed here so the starting point is on the record.
   upstream release it is based on, so a report from this build is never mistaken for one
   against stock VRCFaceTracking.
 
-[1.0.0]: https://github.com/Blise518B/VRCFaceTracking-518/releases/tag/v1.0.0
+[1.0.0]: https://github.com/Blise518B/VRCFaceTracking-518/releases/tag/518-v1.0.0
