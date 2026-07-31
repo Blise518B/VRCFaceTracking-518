@@ -103,7 +103,7 @@ make it synchronous so nobody reintroduces the hop.
 
 ## Done
 
-- **Sentry reporting to upstream's project removed** (`3ac9f2a`). The fork
+- **Sentry reporting to upstream's project removed** (`e43082a`). The fork
   shipped upstream's hardcoded DSN in `App.xaml.cs` (x2) and
   `appsettings.json`, so every crash — including ones in fork-only code — was
   filed into the upstream maintainer's error tracker, and every user's crash
