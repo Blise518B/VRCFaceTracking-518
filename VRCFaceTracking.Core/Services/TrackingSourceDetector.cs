@@ -46,6 +46,12 @@ public class TrackingSourceDetector
         public string[] Pipes { get; init; } = Array.Empty<string>();
 
         /// <summary>
+        /// Bespoke probe for sources none of the generic evidence types can
+        /// judge correctly. Returns an evidence string when live, else null.
+        /// </summary>
+        public Func<string?>? CustomProbe { get; init; }
+
+        /// <summary>
         /// UDP ports this source streams TO, for sources that are just a network stream with
         /// no process on this PC (a phone app, for instance). Probed by briefly listening -
         /// see ProbeUdpStream for why that is safe and why ownership is never used.
@@ -85,14 +91,19 @@ public class TrackingSourceDetector
         {
             Name = "Virtual Desktop",
             ModuleKeywords = new[] { "virtualdesktop", "vdesktop", "vdxr" },
-            // Deliberately NO process evidence: the Streamer/Service run from Windows
-            // startup whenever VD is installed, which made this source permanently
-            // "detected" and let its module steal the eye slot from real hardware
-            // (measured live with a Dream Air + Tobii). Only the face-tracking shared
-            // memory proves a face-capable headset is actually streaming.
-            MemoryMappedFiles = new[] { "VirtualDesktop.FaceState", "VirtualDesktop.FaceTracking" },
+            // Neither generic evidence type can judge VD correctly, measured live
+            // both ways: its Streamer/Service processes run from Windows startup
+            // (permanent false positive that stole the eye slot from a Dream Air),
+            // and the only shared memory it ever creates is VirtualDesktop.BodyState
+            // (the FaceState/FaceTracking names never exist, which made the
+            // process-free fix a permanent false NEGATIVE on a real Quest Pro).
+            // The custom probe reads the validity flags inside BodyState - the same
+            // flags the VD module itself keys tracking on - and requires the
+            // expression weights to actually be changing, so stale flags from an
+            // ended session don't count.
+            CustomProbe = ProbeVirtualDesktopFace,
             Notes = "Quest Pro / Pico face and eye tracking streamed over Virtual Desktop. Detected "
-                  + "only while face data is actually streaming (not merely because VD is installed).",
+                  + "by live face data inside VirtualDesktop.BodyState, not by installed software.",
         },
         new()
         {
@@ -243,6 +254,15 @@ public class TrackingSourceDetector
                         if (pipes.Contains(pipe, StringComparer.OrdinalIgnoreCase))
                         {
                             evidence.Add($"pipe {pipe}");
+                        }
+                    }
+
+                    if (source.CustomProbe != null)
+                    {
+                        var custom = source.CustomProbe();
+                        if (custom != null)
+                        {
+                            evidence.Add(custom);
                         }
                     }
 
@@ -433,6 +453,52 @@ public class TrackingSourceDetector
         catch (Exception)
         {
             return (false, false);
+        }
+    }
+
+    /// <summary>
+    /// Reads the validity flags inside VirtualDesktop.BodyState (offsets from
+    /// the VD module's own FaceState struct: FaceFlags at 0, eye-following
+    /// bool at 1, per-eye validity at 292/293) and then samples the first
+    /// expression weights twice, 60 ms apart. Flags say a face-capable
+    /// headset delivered data; changing weights say it is happening NOW
+    /// rather than being a leftover from an earlier session.
+    /// </summary>
+    private static string? ProbeVirtualDesktopFace()
+    {
+        if (!OperatingSystem.IsWindows())
+        {
+            return null;
+        }
+
+        try
+        {
+            using var mmf = MemoryMappedFile.OpenExisting("VirtualDesktop.BodyState", MemoryMappedFileRights.Read);
+            using var view = mmf.CreateViewAccessor(0, 300, MemoryMappedFileAccess.Read);
+
+            var faceFlags = view.ReadByte(0);
+            var eyeFollowing = view.ReadBoolean(1);
+            var leftEye = view.ReadBoolean(292);
+            var rightEye = view.ReadBoolean(293);
+
+            if (!leftEye && !rightEye && !eyeFollowing && (faceFlags & 0b0001) == 0)
+            {
+                return null;
+            }
+
+            var first = new byte[32];
+            view.ReadArray(4, first, 0, first.Length);
+            Thread.Sleep(60);
+            var second = new byte[32];
+            view.ReadArray(4, second, 0, second.Length);
+
+            return first.AsSpan().SequenceEqual(second)
+                ? null
+                : "live face data in VirtualDesktop.BodyState";
+        }
+        catch (Exception)
+        {
+            return null;
         }
     }
 

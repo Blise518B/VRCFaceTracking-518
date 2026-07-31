@@ -147,6 +147,7 @@ public partial class App : Application
             services.AddSingleton<CrashReportService>();
             services.AddSingleton<TrackingSourceDetector>();
             services.AddSingleton<ModuleActivationService>();
+            services.AddSingleton<ModuleHotSwapService>();
             services.AddSingleton<CompanionAppService>();
             services.AddSingleton<OscRouterClient>();
             services.AddTransient<GithubService>();
@@ -252,6 +253,10 @@ public partial class App : Application
         var companions = App.GetService<CompanionAppService>();
         await companions.InitializeAsync();
         companions.LaunchConfiguredAtStartup();
+
+        // Re-initialize modules automatically when the live tracking sources
+        // change (headset swap) instead of waiting for a manual restart
+        App.GetService<ModuleHotSwapService>().Start();
 
         // 518 OSC Fallback Standard client: receives VRChat's stream via OSC Router 518
         // when VRChat's own discovery can no longer see us (dead after long sessions)

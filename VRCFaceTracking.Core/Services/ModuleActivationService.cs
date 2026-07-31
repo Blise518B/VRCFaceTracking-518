@@ -134,7 +134,7 @@ public partial class ModuleActivationService : ObservableObject
     /// Filters module dll paths down to the ones that should actually be launched, logging
     /// the reason for every decision.
     /// </summary>
-    public List<string> FilterStartablePaths(IEnumerable<InstallableTrackingModule> modules)
+    public List<string> FilterStartablePaths(IEnumerable<InstallableTrackingModule> modules, bool logDecisions = true)
     {
         var allowed = new List<string>();
 
@@ -153,9 +153,12 @@ public partial class ModuleActivationService : ObservableObject
             if (load)
             {
                 allowed.Add(path);
-                _logger?.LogInformation("Starting module {module}: {reason}", key, reason);
+                if (logDecisions)
+                {
+                    _logger?.LogInformation("Starting module {module}: {reason}", key, reason);
+                }
             }
-            else
+            else if (logDecisions)
             {
                 _logger?.LogInformation("Skipping module {module}: {reason}", key, reason);
             }
