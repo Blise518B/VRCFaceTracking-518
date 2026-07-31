@@ -53,6 +53,19 @@ public class CompanionAppService
         TrackingSourceDetector.EtvrSourceName,
     };
 
+    /// <summary>
+    /// Don't auto-launch an app when a source it competes with is already live:
+    /// starting the Dream Air eye stack while the Quest Pro streams over Virtual
+    /// Desktop would put two eye modules in a race for the exclusive eye slot.
+    /// Manual launches from the page are never blocked - the user knows best.
+    /// </summary>
+    private static readonly IReadOnlyDictionary<string, string> AutoLaunchConflicts =
+        new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+        {
+            { TrackingSourceDetector.BrokenEyeSourceName, "Virtual Desktop" },
+            { TrackingSourceDetector.EtvrSourceName, "Virtual Desktop" },
+        };
+
     public CompanionAppService(
         ILocalSettingsService localSettingsService,
         TrackingSourceDetector? detector = null,
@@ -141,6 +154,15 @@ public class CompanionAppService
             if (detected)
             {
                 _logger?.LogInformation("Companion app for {source} already running - not launching", source.Name);
+                continue;
+            }
+
+            if (AutoLaunchConflicts.TryGetValue(source.Name, out var rival)
+                && (statuses?.FirstOrDefault(s => s.Name == rival)?.Detected ?? false))
+            {
+                _logger?.LogInformation(
+                    "Skipping auto-launch of {source}: {rival} is actively streaming - launch it manually from the Launch Apps page if you want both.",
+                    source.Name, rival);
                 continue;
             }
 

@@ -111,7 +111,11 @@ public partial class UtilitiesViewModel : ObservableRecipient
         var statuses = _detector.Scan(force: true);
         foreach (var row in Apps)
         {
-            row.IsRunning = statuses.FirstOrDefault(s => s.Name == row.Name)?.Detected ?? false;
+            // Detection is data-driven (BrokenEye counts only while frames
+            // flow), but for THIS page "running" means the program is open -
+            // so fall back to the configured exe's process.
+            row.IsRunning = (statuses.FirstOrDefault(s => s.Name == row.Name)?.Detected ?? false)
+                            || _companions.IsCommandProcessRunning(row.Name);
         }
 
         var up = Apps.Count(a => a.IsRunning);

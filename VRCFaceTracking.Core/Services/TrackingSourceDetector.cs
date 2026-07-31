@@ -164,10 +164,17 @@ public class TrackingSourceDetector
         {
             Name = BrokenEyeSourceName,
             ModuleKeywords = new[] { "brokeneye", "dreamair", "dream air" },
-            // Release exes carry the version in the name (BrokenEye_v1.4.0.exe).
-            Processes = new[] { "BrokenEye*", "Broken Eye*" },
+            // NOT process-based: BrokenEye auto-launches with VRCFT, so on a
+            // Quest Pro day the process runs while the Dream Air sits on the
+            // desk - and a process-detected BrokenEye would start the DreamAir
+            // module to race Virtual Desktop for the eye slot. The probe asks
+            // its TCP API for actual frames instead: BrokenEye only streams
+            // while the headset is live (measured), so frames = Dream Air
+            // really in use. The app being merely open is the Launch Apps
+            // page's business, not module gating's.
+            CustomProbe = ProbeBrokenEyeStream,
             Notes = "Bridges the headset's Tobii tracker to TCP + MJPEG for the merged eye module "
-                  + "and the camera apps. Must be running and connected to the headset.",
+                  + "and the camera apps. Detected by live Tobii frames, not by the app being open.",
         },
         new()
         {
@@ -456,13 +463,23 @@ public class TrackingSourceDetector
         }
     }
 
+    // Live-data probes can cost tens to hundreds of milliseconds, and the
+    // Launch Apps page force-scans once a second on the UI thread - so each
+    // probe caches its own verdict briefly regardless of Scan's force flag.
+    private static readonly object ProbeCacheLock = new();
+    private static long _vdProbeAt;
+    private static string? _vdProbeResult;
+    private static long _beProbeAt;
+    private static string? _beProbeResult;
+    private const int ProbeCacheMs = 5000;
+
     /// <summary>
     /// Reads the validity flags inside VirtualDesktop.BodyState (offsets from
     /// the VD module's own FaceState struct: FaceFlags at 0, eye-following
     /// bool at 1, per-eye validity at 292/293) and then samples the first
     /// expression weights twice, 60 ms apart. Flags say a face-capable
     /// headset delivered data; changing weights say it is happening NOW
-    /// rather than being a leftover from an earlier session.
+    /// rather than being a leftover of an earlier session.
     /// </summary>
     private static string? ProbeVirtualDesktopFace()
     {
@@ -471,6 +488,25 @@ public class TrackingSourceDetector
             return null;
         }
 
+        lock (ProbeCacheLock)
+        {
+            if (Environment.TickCount64 - _vdProbeAt < ProbeCacheMs)
+            {
+                return _vdProbeResult;
+            }
+        }
+
+        var result = ProbeVirtualDesktopFaceUncached();
+        lock (ProbeCacheLock)
+        {
+            _vdProbeAt = Environment.TickCount64;
+            _vdProbeResult = result;
+        }
+        return result;
+    }
+
+    private static string? ProbeVirtualDesktopFaceUncached()
+    {
         try
         {
             using var mmf = MemoryMappedFile.OpenExisting("VirtualDesktop.BodyState", MemoryMappedFileRights.Read);
@@ -495,6 +531,60 @@ public class TrackingSourceDetector
             return first.AsSpan().SequenceEqual(second)
                 ? null
                 : "live face data in VirtualDesktop.BodyState";
+        }
+        catch (Exception)
+        {
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// Asks BrokenEye's TCP API (127.0.0.1:5555) for actual frames: connect,
+    /// send the 0x00 subscribe byte, and see whether any framed data arrives
+    /// within ~400 ms. BrokenEye serves multiple clients by design and only
+    /// streams while the headset is live, so this cannot disturb the module's
+    /// own connection and cleanly separates "app open" from "Dream Air in use".
+    /// </summary>
+    private static string? ProbeBrokenEyeStream()
+    {
+        lock (ProbeCacheLock)
+        {
+            if (Environment.TickCount64 - _beProbeAt < ProbeCacheMs)
+            {
+                return _beProbeResult;
+            }
+        }
+
+        var result = ProbeBrokenEyeStreamUncached();
+        lock (ProbeCacheLock)
+        {
+            _beProbeAt = Environment.TickCount64;
+            _beProbeResult = result;
+        }
+        return result;
+    }
+
+    private static string? ProbeBrokenEyeStreamUncached()
+    {
+        try
+        {
+            using var socket = new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp);
+            var connect = socket.BeginConnect(IPAddress.Loopback, 5555, null, null);
+            if (!connect.AsyncWaitHandle.WaitOne(250))
+            {
+                return null; // nothing listening (or wedged) - not live either way
+            }
+            socket.EndConnect(connect);
+
+            socket.NoDelay = true;
+            socket.ReceiveTimeout = 400;
+            socket.Send(new byte[] { 0x00 });
+
+            // A packet header is [1B id][4B length]; any bytes at all mean the
+            // tracker is delivering frames right now.
+            var buffer = new byte[64];
+            var read = socket.Receive(buffer);
+            return read > 0 ? "Tobii frames streaming on TCP 5555" : null;
         }
         catch (Exception)
         {

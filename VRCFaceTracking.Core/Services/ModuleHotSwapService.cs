@@ -77,6 +77,16 @@ public class ModuleHotSwapService : IDisposable
                 return;
             }
 
+            // Never swap TO nothing: a momentary all-sources blackout (app
+            // restarting, stream hiccup) must not tear down modules that have
+            // their own reconnect logic. Recovery to any non-empty set still
+            // triggers normally.
+            if (current.Length == 0)
+            {
+                _pendingSet = null;
+                return;
+            }
+
             // Require the same changed set twice in a row before acting.
             if (current != _pendingSet)
             {
