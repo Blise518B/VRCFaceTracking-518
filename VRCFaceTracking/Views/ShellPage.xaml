@@ -100,6 +100,13 @@
                         <FontIcon FontFamily="{StaticResource SymbolThemeFontFamily}" Glyph="&#xE774;"/>
                     </NavigationViewItem.Icon>
                 </NavigationViewItem>
+                <NavigationViewItem Content="Compatibility"
+                                    ToolTipService.ToolTip="Run any hardware, keep avatars tuned for Quest Pro or Vive - dialect translation"
+                                    helpers:NavigationHelper.NavigateTo="VRCFaceTracking.ViewModels.CompatibilityViewModel">
+                    <NavigationViewItem.Icon>
+                        <FontIcon FontFamily="{StaticResource SymbolThemeFontFamily}" Glyph="&#xE8AB;"/>
+                    </NavigationViewItem.Icon>
+                </NavigationViewItem>
             </NavigationView.MenuItems>
             <!-- An action, not a page: switches this session to the console monitor.
                  Lives in the pane because it's needed often, especially during setup. -->

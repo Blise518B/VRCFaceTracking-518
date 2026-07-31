@@ -25,6 +25,7 @@ public class PageService : IPageService
         Configure<TrackingDebugViewModel, TrackingDebugPage>();
         Configure<UtilitiesViewModel, UtilitiesPage>();
         Configure<VrcOutputViewModel, VrcOutputPage>();
+        Configure<CompatibilityViewModel, CompatibilityPage>();
     }
 
     public Type GetPageType(string key)

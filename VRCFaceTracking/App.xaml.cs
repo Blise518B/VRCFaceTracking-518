@@ -168,6 +168,8 @@ public partial class App : Application
             services.AddTransient<UtilitiesPage>();
             services.AddSingleton<VrcOutputViewModel>();
             services.AddTransient<VrcOutputPage>();
+            services.AddSingleton<CompatibilityViewModel>();
+            services.AddTransient<CompatibilityPage>();
             services.AddTransient<SourcesViewModel>();
             services.AddTransient<SourcesPage>();
             services.AddTransient<OutputViewModel>();
@@ -254,6 +256,22 @@ public partial class App : Application
         // 518 OSC Fallback Standard client: receives VRChat's stream via OSC Router 518
         // when VRChat's own discovery can no longer see us (dead after long sessions)
         await App.GetService<OscRouterClient>().InitializeAsync();
+
+        // Tracking Compatibility gates its transforms on which module actually
+        // owns the eye slot (e.g. no double openness-coupling on a real Quest
+        // Pro). Same static-wiring pattern as the curve profiles below.
+        TrackingCompatibility.EyeOwnerResolver = () =>
+        {
+            try
+            {
+                return GetService<ILibManager>().LoadedModulesMetadata
+                    .FirstOrDefault(m => m.UsingEye)?.Name;
+            }
+            catch (Exception)
+            {
+                return null;
+            }
+        };
 
         // Let curve profiles follow whichever source is actually streaming. Mutations are
         // built by reflection with no constructor args, so this is wired statically.
