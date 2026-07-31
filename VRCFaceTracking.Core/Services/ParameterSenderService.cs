@@ -1,4 +1,6 @@
-﻿using Microsoft.Extensions.Hosting;
+﻿using System.Collections.Concurrent;
+using System.Diagnostics;
+using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using VRCFaceTracking.Core.Contracts;
 using VRCFaceTracking.Core.OSC;
@@ -8,9 +10,10 @@ namespace VRCFaceTracking.Core.Services;
 
 public class ParameterSenderService : BackgroundService
 {
-    // We probably don't need a queue since we use osc message bundles, but for now, we're keeping it as
-    // we might want to allow a way for the user to specify bundle or single message sends in the future
-    private static readonly Queue<OscMessage> SendQueue = new();
+    // Concurrent: most enqueues come from parameter Process() on the send loop itself,
+    // but avatar-config loads enqueue from the OSC receive path (sendOnLoad), so this
+    // queue really is touched from more than one thread.
+    private static readonly ConcurrentQueue<OscMessage> SendQueue = new();
  
     private readonly OscSendService _sendService;
     private readonly UnifiedTrackingMutator _mutator; // We don't use this but we do want DI to run its constructor
@@ -33,6 +36,9 @@ public class ParameterSenderService : BackgroundService
             }
         }
     }
+
+    // Reused batch buffer so draining the queue doesn't allocate an array per 10ms tick.
+    private OscMessage[] _batch = new OscMessage[256];
     
     private readonly ILogger<ParameterSenderService>? _logger;
     private DateTime _lastSendErrorLog = DateTime.MinValue;
@@ -57,15 +63,27 @@ public class ParameterSenderService : BackgroundService
 
                 await UnifiedTracking.UpdateData(cancellationToken);
 
-                // Send all messages in OSCParams.SendQueue
-                if (SendQueue.Count <= 0)
+                // Drain the queue into the reused batch buffer (no per-tick allocations)
+                var count = 0;
+                while (SendQueue.TryDequeue(out var message))
                 {
-                    continue;
+                    if (count == _batch.Length)
+                    {
+                        Array.Resize(ref _batch, _batch.Length * 2);
+                    }
+                    _batch[count++] = message;
                 }
 
-                await _sendService.Send(SendQueue.ToArray(), cancellationToken);
+                var sendStart = Stopwatch.GetTimestamp();
+                if (count > 0)
+                {
+                    await _sendService.Send(_batch, count, cancellationToken);
+                    // Drop the references so a swapped avatar's parameters can be collected
+                    Array.Clear(_batch, 0, count);
+                }
 
-                SendQueue.Clear();
+                PipelineWatch.RecordLoop(
+                    (Stopwatch.GetTimestamp() - sendStart) * 1000.0 / Stopwatch.Frequency);
             }
             catch (OperationCanceledException)
             {

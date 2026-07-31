@@ -135,6 +135,10 @@
                                FontFamily="Consolas" FontSize="11"
                                Foreground="{ThemeResource TextFillColorSecondaryBrush}"
                                TextWrapping="Wrap"/>
+                    <TextBlock Text="{x:Bind ViewModel.PerfSummary, Mode=OneWay}"
+                               FontFamily="Consolas" FontSize="11"
+                               Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                               TextWrapping="Wrap"/>
                     <StackPanel Orientation="Horizontal" Spacing="16" Margin="0,6,0,0">
                         <TextBox PlaceholderText="filter shapes..."
                                  MinWidth="220"

@@ -96,12 +96,32 @@ public class TrackingCompatibility : TrackingMutation
         return "other";
     }
 
+    // The eye-owner lookup resolves a service and walks a UI-bound collection, so it is
+    // not something to do 100 times a second on the tracking thread. The owning module
+    // changes on the timescale of headset swaps; once a second is generous.
+    [JsonIgnore] private long _dialectCheckedAt;
+    [JsonIgnore] private string _eyeDialect = "none";
+
     public override void MutateData(ref UnifiedTrackingData data)
     {
         switch (profile)
         {
             case ProfileQuestPro:
-                ApplyQuestPro(ref data, DialectOf(EyeOwnerResolver?.Invoke()));
+                var now = Environment.TickCount64;
+                if (now - _dialectCheckedAt >= 1000)
+                {
+                    _dialectCheckedAt = now;
+                    try
+                    {
+                        _eyeDialect = DialectOf(EyeOwnerResolver?.Invoke());
+                    }
+                    catch (Exception)
+                    {
+                        // A UI-thread mutation of the module list mid-walk must not
+                        // take down the tracking loop; keep the previous dialect.
+                    }
+                }
+                ApplyQuestPro(ref data, _eyeDialect);
                 break;
             case ProfileVive:
                 ApplyVive(ref data);

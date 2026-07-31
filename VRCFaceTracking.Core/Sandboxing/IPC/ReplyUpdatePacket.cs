@@ -48,69 +48,53 @@ public class ReplyUpdatePacket : IpcPacket
 
     public override PacketType GetPacketType() => PacketType.ReplyUpdate;
 
-    // We send a challenge to the vrcft host, and if we receive a reply with the same data, we consider the connection successfully ACKed.
-    // In other words, this packet is the handshake begin and ACK packet.
+    // Wire layout (unchanged from the Marshal-based version, all little-endian floats):
+    // [4B magic][4B type][4B struct size][16 header floats][EXPRESSION_COUNT shape floats].
+    // Header float order matches UpdateDataContiguous's field order exactly.
+    private const int HEADER_FLOATS = 16;
+    private const int STRUCT_SIZE = (HEADER_FLOATS + EXPRESSION_COUNT) * sizeof(float);
+
+    // Staging buffer reused between calls: this packet is built/decoded 100 times a
+    // second per module, and the previous implementation paid AllocHGlobal +
+    // Marshal.StructureToPtr/PtrToStructure (plus an intermediate byte[]) per packet
+    // on BOTH sides of the IPC link. A float[]->byte[] block copy is the same bytes
+    // with none of that.
+    private readonly float[] _staging = new float[HEADER_FLOATS + EXPRESSION_COUNT];
+
     public override byte[] GetBytes()
     {
-        // Build handshake packet
+        var f = _staging;
+        f[0]  = UnifiedTracking.Data.Eye._maxDilation;
+        f[1]  = UnifiedTracking.Data.Eye._minDilation;
 
-        byte[] packetTypeBytes = BitConverter.GetBytes((uint)GetPacketType());
+        f[2]  = UnifiedTracking.Data.Eye.Left.Gaze.x;
+        f[3]  = UnifiedTracking.Data.Eye.Left.Gaze.y;
+        f[4]  = UnifiedTracking.Data.Eye.Left.PupilDiameter_MM;
+        f[5]  = UnifiedTracking.Data.Eye.Left.Openness;
 
-        int packetSize = SIZE_PACKET_MAGIC + SIZE_PACKET_TYPE;
+        f[6]  = UnifiedTracking.Data.Eye.Right.Gaze.x;
+        f[7]  = UnifiedTracking.Data.Eye.Right.Gaze.y;
+        f[8]  = UnifiedTracking.Data.Eye.Right.PupilDiameter_MM;
+        f[9]  = UnifiedTracking.Data.Eye.Right.Openness;
 
-        // Update the internal data structure to match the current state of unified tracking
-        _contiguousUnifiedData.Eye_Left_GazeX               = UnifiedTracking.Data.Eye.Left.Gaze.x;
-        _contiguousUnifiedData.Eye_Left_GazeY               = UnifiedTracking.Data.Eye.Left.Gaze.y;
-        _contiguousUnifiedData.Eye_Left_PupilDiameter_MM    = UnifiedTracking.Data.Eye.Left.PupilDiameter_MM;
-        _contiguousUnifiedData.Eye_Left_Openness            = UnifiedTracking.Data.Eye.Left.Openness;
-        
-        _contiguousUnifiedData.Eye_Right_GazeX              = UnifiedTracking.Data.Eye.Right.Gaze.x;
-        _contiguousUnifiedData.Eye_Right_GazeY              = UnifiedTracking.Data.Eye.Right.Gaze.y;
-        _contiguousUnifiedData.Eye_Right_PupilDiameter_MM   = UnifiedTracking.Data.Eye.Right.PupilDiameter_MM;
-        _contiguousUnifiedData.Eye_Right_Openness           = UnifiedTracking.Data.Eye.Right.Openness;
+        f[10] = UnifiedTracking.Data.Head.HeadYaw;
+        f[11] = UnifiedTracking.Data.Head.HeadPitch;
+        f[12] = UnifiedTracking.Data.Head.HeadRoll;
 
-        _contiguousUnifiedData.Eye_MaxDilation              = UnifiedTracking.Data.Eye._maxDilation;
-        _contiguousUnifiedData.Eye_MinDilation              = UnifiedTracking.Data.Eye._minDilation;
+        f[13] = UnifiedTracking.Data.Head.HeadPosX;
+        f[14] = UnifiedTracking.Data.Head.HeadPosY;
+        f[15] = UnifiedTracking.Data.Head.HeadPosZ;
 
-        _contiguousUnifiedData.Head_Yaw                     = UnifiedTracking.Data.Head.HeadYaw;
-        _contiguousUnifiedData.Head_Pitch                   = UnifiedTracking.Data.Head.HeadPitch;
-        _contiguousUnifiedData.Head_Roll                    = UnifiedTracking.Data.Head.HeadRoll;
-
-        _contiguousUnifiedData.Head_PosX                    = UnifiedTracking.Data.Head.HeadPosX;
-        _contiguousUnifiedData.Head_PosY                    = UnifiedTracking.Data.Head.HeadPosY;
-        _contiguousUnifiedData.Head_PosZ                    = UnifiedTracking.Data.Head.HeadPosZ;
-
-        // Copy face tracking
-        for ( int i = 0; i < _contiguousUnifiedData.Expression_Shapes.Length; i++ )
+        for ( int i = 0; i < EXPRESSION_COUNT; i++ )
         {
-            _contiguousUnifiedData.Expression_Shapes[i] = UnifiedTracking.Data.Shapes[i].Weight;
+            f[HEADER_FLOATS + i] = UnifiedTracking.Data.Shapes[i].Weight;
         }
 
-        // Convert _contiguousUnifiedData to bytes
-        int sizeStruct = Marshal.SizeOf<UpdateDataContiguous>();
-        byte[] sizeStructBytes = BitConverter.GetBytes(sizeStruct);
-        byte[] arr = new byte[sizeStruct];
-
-        var ptr = IntPtr.Zero;
-        try
-        {
-            ptr = Marshal.AllocHGlobal(sizeStruct);
-            Marshal.StructureToPtr(_contiguousUnifiedData, ptr, false);
-            Marshal.Copy(ptr, arr, 0, sizeStruct);
-        }
-        finally
-        {
-            Marshal.FreeHGlobal(ptr);
-        }
-
-        packetSize = packetSize + sizeof(int) + sizeStruct;
-
-        // Prepare buffer
-        byte[] finalDataStream = new byte[packetSize];
-        Buffer.BlockCopy(HANDSHAKE_MAGIC,   0, finalDataStream, 0,  SIZE_PACKET_MAGIC);     // Magic
-        Buffer.BlockCopy(packetTypeBytes,   0, finalDataStream, 4,  SIZE_PACKET_TYPE);      // Packet Type
-        Buffer.BlockCopy(sizeStructBytes,   0, finalDataStream, 8,  sizeof(int));           // Struct.Length
-        Buffer.BlockCopy(arr,               0, finalDataStream, 12, sizeStruct);            // Data
+        byte[] finalDataStream = new byte[SIZE_PACKET_MAGIC + SIZE_PACKET_TYPE + sizeof(int) + STRUCT_SIZE];
+        Buffer.BlockCopy(HANDSHAKE_MAGIC, 0, finalDataStream, 0, SIZE_PACKET_MAGIC);
+        BitConverter.TryWriteBytes(finalDataStream.AsSpan(4), (uint)GetPacketType());
+        BitConverter.TryWriteBytes(finalDataStream.AsSpan(8), STRUCT_SIZE);
+        Buffer.BlockCopy(f, 0, finalDataStream, 12, STRUCT_SIZE);
 
         return finalDataStream;
     }
@@ -118,17 +102,37 @@ public class ReplyUpdatePacket : IpcPacket
     public override void Decode(in byte[] data)
     {
         int structSize = BitConverter.ToInt32(data, 8);
-        
-        var ptr = IntPtr.Zero;
-        try
+        var bytes = Math.Min(structSize, STRUCT_SIZE);
+        if ( bytes < HEADER_FLOATS * sizeof(float) || data.Length < 12 + bytes )
         {
-            ptr = Marshal.AllocHGlobal(structSize);
-            Marshal.Copy(data, 12, ptr, structSize);
-            Marshal.PtrToStructure<UpdateDataContiguous>(ptr, _contiguousUnifiedData);
+            return; // Truncated packet; keep the previous frame rather than reading garbage
         }
-        finally
+
+        var f = _staging;
+        Buffer.BlockCopy(data, 12, f, 0, bytes);
+
+        var d = _contiguousUnifiedData;
+        d.Eye_MaxDilation           = f[0];
+        d.Eye_MinDilation           = f[1];
+        d.Eye_Left_GazeX            = f[2];
+        d.Eye_Left_GazeY            = f[3];
+        d.Eye_Left_PupilDiameter_MM = f[4];
+        d.Eye_Left_Openness         = f[5];
+        d.Eye_Right_GazeX           = f[6];
+        d.Eye_Right_GazeY           = f[7];
+        d.Eye_Right_PupilDiameter_MM = f[8];
+        d.Eye_Right_Openness        = f[9];
+        d.Head_Yaw                  = f[10];
+        d.Head_Pitch                = f[11];
+        d.Head_Roll                 = f[12];
+        d.Head_PosX                 = f[13];
+        d.Head_PosY                 = f[14];
+        d.Head_PosZ                 = f[15];
+
+        var shapeFloats = bytes / sizeof(float) - HEADER_FLOATS;
+        for ( int i = 0; i < shapeFloats && i < EXPRESSION_COUNT; i++ )
         {
-            Marshal.FreeHGlobal(ptr);
+            d.Expression_Shapes[i] = f[HEADER_FLOATS + i];
         }
     }
 

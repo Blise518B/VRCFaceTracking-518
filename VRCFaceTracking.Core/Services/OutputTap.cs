@@ -33,7 +33,9 @@ public static class OutputTap
 
     public static volatile bool Enabled;
 
-    public static void Record(OscMessage[] messages)
+    public static void Record(OscMessage[] messages) => Record(messages, messages.Length);
+
+    public static void Record(OscMessage[] messages, int count)
     {
         var now = Environment.TickCount64;
 
@@ -44,8 +46,9 @@ public static class OutputTap
             _totalWindowStart = now;
         }
 
-        foreach (var message in messages)
+        for (var i = 0; i < count; i++)
         {
+            var message = messages[i];
             var address = message.Address;
             if (string.IsNullOrEmpty(address))
             {

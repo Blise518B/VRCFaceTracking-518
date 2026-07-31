@@ -107,18 +107,22 @@ public static class Program
             await services.GetRequiredService<ModuleActivationService>().InitializeAsync();
             await services.GetRequiredService<OscRouterClient>().InitializeAsync();
 
+            // ScanCached, never Scan: this resolver runs inside MutateData on the 100Hz
+            // tracking thread, and a cold Scan() blocks for the full probe sweep.
             CurveCalibration.SourceNameResolver = () =>
             {
                 try
                 {
                     return services.GetRequiredService<TrackingSourceDetector>()
-                        .Scan().FirstOrDefault(s => s.Strong)?.Name;
+                        .ScanCached().FirstOrDefault(s => s.Strong)?.Name;
                 }
                 catch (Exception)
                 {
                     return null;
                 }
             };
+
+            PipelineWatch.Logger = services.GetRequiredService<ILoggerFactory>().CreateLogger("PipelineWatch");
 
             var oscQuery = services.GetRequiredService<OscQueryService>();
             var recv = services.GetRequiredService<OscRecvService>();

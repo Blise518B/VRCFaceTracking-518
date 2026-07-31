@@ -223,7 +223,9 @@ public partial class CurvesViewModel : ObservableRecipient
     {
         try
         {
-            return App.GetService<TrackingSourceDetector>().Scan().FirstOrDefault(s => s.Strong)?.Name;
+            // Non-blocking: this can be called from UI refresh paths, and a cold Scan()
+            // costs hundreds of milliseconds of probing.
+            return App.GetService<TrackingSourceDetector>().ScanCached().FirstOrDefault(s => s.Strong)?.Name;
         }
         catch (Exception)
         {

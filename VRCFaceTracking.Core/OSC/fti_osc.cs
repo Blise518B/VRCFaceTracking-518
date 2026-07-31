@@ -106,7 +106,10 @@ public static class fti_osc
     [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
     public static extern int create_osc_bundle(
         [MarshalAs(UnmanagedType.LPArray, SizeConst = 4096)] byte[] buf,
-        [MarshalAs(UnmanagedType.LPArray)] OscMessageMeta[] messages,
+        // SizeParamIndex: only marshal the first `len` elements. The caller reuses an
+        // oversized array between ticks; without this the marshaller would copy every
+        // slot (including stale ones past `len`) to native memory on each call.
+        [MarshalAs(UnmanagedType.LPArray, SizeParamIndex = 2)] OscMessageMeta[] messages,
         int len,
         ref int messageIndex);
 

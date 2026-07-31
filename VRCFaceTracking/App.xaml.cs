@@ -293,12 +293,18 @@ public partial class App : Application
 
         // Let curve profiles follow whichever source is actually streaming. Mutations are
         // built by reflection with no constructor args, so this is wired statically.
+        //
+        // ScanCached, never Scan: this resolver is invoked from inside MutateData on the
+        // 100Hz tracking thread. A blocking Scan() here made the tracking thread pay for
+        // the full probe sweep (~430ms measured) every time the cache expired - the
+        // "avatar freezes for half a second every few seconds" bug. ScanCached returns
+        // instantly and refreshes in the background.
         CurveCalibration.SourceNameResolver = () =>
         {
             try
             {
                 return GetService<TrackingSourceDetector>()
-                    .Scan()
+                    .ScanCached()
                     .FirstOrDefault(s => s.Strong)?.Name;
             }
             catch (Exception)
@@ -306,6 +312,10 @@ public partial class App : Application
                 return null;
             }
         };
+
+        // Give the pipeline performance watch a logger so stall warnings (with their
+        // stage breakdown) land in latest.log instead of vanishing.
+        PipelineWatch.Logger = GetService<ILoggerFactory>().CreateLogger("PipelineWatch");
 
         await App.GetService<IActivationService>().ActivateAsync(args);
         await Host.StartAsync();

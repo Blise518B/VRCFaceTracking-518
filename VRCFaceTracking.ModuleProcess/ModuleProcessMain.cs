@@ -1,4 +1,5 @@
-﻿using System.CommandLine;
+﻿using System.Collections.Concurrent;
+using System.CommandLine;
 using System.Diagnostics;
 using System.Runtime.InteropServices;
 using Microsoft.Extensions.DependencyInjection;
@@ -21,7 +22,12 @@ public class ModuleProcessMain
     public static VrcftSandboxClient Client;
     public static CancellationTokenSource cts = new();
 
-    private static Queue<IpcPacket> _packetsToSend = new ();
+    // Concurrent: enqueued from the UDP receive path while the main loop dequeues. The
+    // old plain Queue could corrupt under that race, and an exception escaping the
+    // receive task killed reception SILENTLY - the process then sat deaf until the 60s
+    // connection timeout shot it.
+    private static ConcurrentQueue<IpcPacket> _packetsToSend = new ();
+    private static readonly ReplyUpdatePacket _replyUpdatePacket = new ();
     private static Timer? _connectionTimer;
 
     private static object _callbackLock = new ();
@@ -286,9 +292,10 @@ public class ModuleProcessMain
 
                 case IpcPacket.PacketType.EventUpdate:
                     {
-                        // Logger.LogDebug("EventUpdate");
-                        var pkt = new ReplyUpdatePacket();
-                        _packetsToSend.Enqueue(pkt);
+                        // One shared reply instance: GetBytes() reads the CURRENT tracking
+                        // state at send time, so identical instances queued back-to-back
+                        // still serialize fresh data - and this path runs 100x a second.
+                        _packetsToSend.Enqueue(_replyUpdatePacket);
                         break;
                     }
 

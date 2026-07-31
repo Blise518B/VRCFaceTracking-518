@@ -17,7 +17,11 @@ namespace VRCFaceTracking.Core.Services;
 public class TrackingSourceDetector
 {
     private static readonly TimeSpan CacheLifetime = TimeSpan.FromSeconds(5);
-    private static readonly TimeSpan UdpProbeWindow = TimeSpan.FromMilliseconds(250);
+    // iFacialMocap streams at ~60Hz (a packet every ~16ms), so 50ms is three packet
+    // periods - plenty. This window is a hard BLOCK for whoever runs the sweep, and it
+    // used to be 250ms: measured on a live rig, that single Poll made every cold scan
+    // cost ~430ms. See ProbeUdpStream for why the probe must wait at all.
+    private static readonly TimeSpan UdpProbeWindow = TimeSpan.FromMilliseconds(50);
 
     /// <summary>Source names referenced from other services (companion app defaults).</summary>
     public const string EtvrSourceName = "EyeTrackVR (ETVR)";
@@ -216,6 +220,12 @@ public class TrackingSourceDetector
     /// <summary>
     /// Probes every known source. Results are cached briefly so a UI refresh and a module
     /// startup pass don't each pay for a full sweep.
+    ///
+    /// The sweep itself runs OUTSIDE the cache lock: probes block for real time (process
+    /// enumeration, a UDP listen window), and holding the lock through them made every
+    /// other caller queue behind the slowest one - including, before ScanCached existed,
+    /// the 100Hz tracking thread. Two threads sweeping concurrently is harmless; every
+    /// probe is a read-only OS query.
     /// </summary>
     public List<TrackingSourceStatus> Scan(bool force = false)
     {
@@ -225,7 +235,62 @@ public class TrackingSourceDetector
             {
                 return _cached;
             }
+        }
 
+        var results = Sweep();
+
+        lock (_cacheLock)
+        {
+            _cached = results;
+            _cachedAt = DateTime.UtcNow;
+            return results;
+        }
+    }
+
+    private int _backgroundRefreshInFlight;
+
+    /// <summary>
+    /// Never-blocking read for hot paths (the 100Hz tracking thread, per-frame UI): returns
+    /// the last completed sweep immediately and, when that is stale, refreshes it on a
+    /// background thread for the NEXT caller. The one thing this must never do is make the
+    /// caller pay for a probe - a cold sweep costs hundreds of milliseconds, and paying it
+    /// on the tracking thread froze the avatar for exactly that long every few seconds.
+    /// </summary>
+    public List<TrackingSourceStatus> ScanCached()
+    {
+        List<TrackingSourceStatus>? cached;
+        bool stale;
+        lock (_cacheLock)
+        {
+            cached = _cached;
+            stale = cached == null || DateTime.UtcNow - _cachedAt >= CacheLifetime;
+        }
+
+        if (stale && Interlocked.CompareExchange(ref _backgroundRefreshInFlight, 1, 0) == 0)
+        {
+            Task.Run(() =>
+            {
+                try
+                {
+                    Scan();
+                }
+                catch (Exception e)
+                {
+                    _logger?.LogDebug("Background source refresh failed: {message}", e.Message);
+                }
+                finally
+                {
+                    Volatile.Write(ref _backgroundRefreshInFlight, 0);
+                }
+            });
+        }
+
+        return cached ?? new List<TrackingSourceStatus>();
+    }
+
+    private List<TrackingSourceStatus> Sweep()
+    {
+        {
             var runningProcesses = SafeProcessNames();
             var pipes = SafePipeNames();
 
@@ -275,7 +340,7 @@ public class TrackingSourceDetector
 
                     foreach (var port in source.UdpStreamPorts)
                     {
-                        var (bindable, dataWaiting) = ProbeUdpStream(port);
+                        var (bindable, dataWaiting) = ProbeUdpStreamCached(port);
                         if (!bindable)
                         {
                             // Someone already listens there, which in practice is this
@@ -302,8 +367,6 @@ public class TrackingSourceDetector
                 });
             }
 
-            _cached = results;
-            _cachedAt = DateTime.UtcNow;
             return results;
         }
     }
@@ -439,6 +502,30 @@ public class TrackingSourceDetector
     /// setup found port 8889 held by VRCFaceTracking's own ETVR module, i.e. a probe reporting
     /// our own listener back to us and keeping a module "detected" forever.
     /// </summary>
+    // Even at 50ms, the listen window is a real block - and this probe runs for a port
+    // nobody is usually streaming to, so it pays the FULL window on every quiet sweep.
+    // Cached like the other live-data probes so at most one sweep per lifetime pays it.
+    private static readonly Dictionary<int, (long At, bool Bindable, bool DataWaiting)> UdpProbeCache = new();
+
+    private static (bool Bindable, bool DataWaiting) ProbeUdpStreamCached(int port)
+    {
+        lock (ProbeCacheLock)
+        {
+            if (UdpProbeCache.TryGetValue(port, out var hit) &&
+                Environment.TickCount64 - hit.At < ProbeCacheMs)
+            {
+                return (hit.Bindable, hit.DataWaiting);
+            }
+        }
+
+        var result = ProbeUdpStream(port);
+        lock (ProbeCacheLock)
+        {
+            UdpProbeCache[port] = (Environment.TickCount64, result.Bindable, result.DataWaiting);
+        }
+        return result;
+    }
+
     private static (bool Bindable, bool DataWaiting) ProbeUdpStream(int port)
     {
         try

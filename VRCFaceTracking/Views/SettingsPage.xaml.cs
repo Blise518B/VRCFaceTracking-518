@@ -116,10 +116,18 @@ public sealed partial class SettingsPage : Page, INotifyPropertyChanged
             PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(HasNoRestartEvents)));
 
         Loaded += OnPageLoaded;
-        
-        UnifiedTracking.OnUnifiedDataUpdated += _ => DispatcherQueue?.TryEnqueue(OnTrackingDataUpdated);
+
+        // Subscribe only while the page is showing, with a stored delegate so the
+        // unsubscribe actually matches. The old inline `+=` in the constructor meant
+        // every visit to Settings added another permanent 100Hz handler (and kept the
+        // dead page instance alive through the static event) for the rest of the session.
+        _onUnifiedDataUpdated = _ => DispatcherQueue?.TryEnqueue(OnTrackingDataUpdated);
+        Loaded += (_, _) => UnifiedTracking.OnUnifiedDataUpdated += _onUnifiedDataUpdated;
+        Unloaded += (_, _) => UnifiedTracking.OnUnifiedDataUpdated -= _onUnifiedDataUpdated;
         InitializeComponent();
     }
+
+    private readonly Action<UnifiedTrackingData> _onUnifiedDataUpdated;
 
     private void InitializeHardwareDebugStream(VrcftImage image, ref WriteableBitmap bitmap, ref Stream targetStream)
     {

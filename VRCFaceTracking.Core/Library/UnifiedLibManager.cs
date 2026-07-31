@@ -689,6 +689,10 @@ public class UnifiedLibManager : ILibManager
                         {
                             ReplyUpdatePacket replyUpdatePacket = (ReplyUpdatePacket) packet;
 
+                            // Input-side heartbeat: lets the perf watch tell "module went
+                            // silent" apart from "our pipeline stalled" when tracking freezes.
+                            PipelineWatch.RecordModuleData();
+
                             if ( AvailableSandboxModules[moduleIndex].Status == ModuleState.Active && AvailableSandboxModules[moduleIndex].ModuleInformation.Active )
                             {
                                 if ( AvailableSandboxModules[moduleIndex].ModuleInformation.UsingEye )

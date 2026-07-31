@@ -108,35 +108,42 @@ public class OscRecvService : BackgroundService
 
         while (!_stoppingToken.IsCancellationRequested)
         {
+            // No socket to read: wait a beat instead of spinning. The old bare `continue`
+            // burned a full core whenever the bind failed or was cancelled.
             if (_linkedToken.IsCancellationRequested || _recvSocket is not { IsBound: true })
             {
+                try
+                {
+                    await Task.Delay(100, _stoppingToken);
+                }
+                catch (OperationCanceledException)
+                {
+                    break;
+                }
                 continue;
             }
 
             try
             {
-                if (_recvSocket.Available > 0)
+                // Block on the receive itself. The old loop polled Available and slept
+                // 100ms between polls, adding up to 100ms of latency to every incoming
+                // message (avatar changes, parameter feedback) for no benefit -
+                // cancellation already aborts the awaited receive.
+                var bytesReceived =
+                    await _recvSocket.ReceiveAsync(_recvBuffer, SocketFlags.None, _linkedToken.Token);
+                var offset = 0;
+                var newMsg = OscMessage.TryParseOsc(_recvBuffer, bytesReceived, ref offset);
+                if (newMsg == null)
                 {
-                    var bytesReceived =
-                        await _recvSocket.ReceiveAsync(_recvBuffer, SocketFlags.None, _linkedToken.Token);
-                    var offset = 0;
-                    var newMsg = OscMessage.TryParseOsc(_recvBuffer, bytesReceived, ref offset);
-                    if (newMsg == null)
-                    {
-                        continue;
-                    }
+                    continue;
+                }
 
-                    OnMessageReceived(newMsg);
-                }
-                else
-                {
-                    await Task.Delay(100, _linkedToken.Token);
-                }
+                OnMessageReceived(newMsg);
             }
             catch (Exception e)
             {
                 // We don't care about operation cancellations as they're intentional and carefully controlled
-                if (e.GetType() == typeof(OperationCanceledException) || e.GetType() == typeof(TaskCanceledException))
+                if (e is OperationCanceledException)
                 {
                     continue;
                 }

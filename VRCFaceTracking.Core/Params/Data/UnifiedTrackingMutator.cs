@@ -49,9 +49,15 @@ public partial class UnifiedTrackingMutator : ObservableObject
 
         lock (_mutationsLock)
         {
-            foreach (var mutator in _mutations.Where(m => m.IsActive))
+            // Indexed loop, no LINQ: this runs 100 times a second on the tracking thread,
+            // and Where() allocates an enumerator per call.
+            for (var i = 0; i < _mutations.Count; i++)
             {
-                mutator.MutateData(ref _inputBuffer);
+                var mutation = _mutations[i];
+                if (mutation is { IsActive: true })
+                {
+                    mutation.MutateData(ref _inputBuffer);
+                }
             }
         }
 

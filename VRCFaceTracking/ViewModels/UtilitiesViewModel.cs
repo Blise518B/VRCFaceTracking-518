@@ -108,7 +108,10 @@ public partial class UtilitiesViewModel : ObservableRecipient
 
     public void RefreshStatus()
     {
-        var statuses = _detector.Scan(force: true);
+        // This runs on a 1s UI timer. ScanCached never blocks the UI thread on a probe
+        // sweep (a cold one costs hundreds of ms); it serves the last sweep and refreshes
+        // in the background, so the pills update within a few seconds of reality.
+        var statuses = _detector.ScanCached();
         foreach (var row in Apps)
         {
             // Detection is data-driven (BrokenEye counts only while frames

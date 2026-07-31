@@ -5,6 +5,7 @@ using Microsoft.UI.Dispatching;
 using VRCFaceTracking.Core.Contracts.Services;
 using VRCFaceTracking.Core.Params.Data;
 using VRCFaceTracking.Core.Params.Expressions;
+using VRCFaceTracking.Core.Services;
 
 namespace VRCFaceTracking.ViewModels;
 
@@ -74,6 +75,7 @@ public partial class TrackingDebugViewModel : ObservableRecipient
     [ObservableProperty] private bool _onlyMoving;
     [ObservableProperty] private string _slotSummary = "-";
     [ObservableProperty] private string _routingSummary = "-";
+    [ObservableProperty] private string _perfSummary = "-";
 
     // The big expression-source badge + switch. Mode is what's configured
     // (auto/etvr/babble); the badge shows what is ACTUALLY driving right now.
@@ -340,6 +342,12 @@ public partial class TrackingDebugViewModel : ObservableRecipient
             : $"{_routing.Module}:  gaze = {_routing.Gaze}   |   lids = {_routing.Lids}   |   " +
               $"shapes = {_routing.Shapes} (ETVR {_routing.EtvrRate}/s, Babble {_routing.BabbleRate}/s)   |   " +
               $"pupil = {_routing.Pupil}   |   relay = {_routing.Relay}";
+
+        // Live pipeline health from the always-on performance watch
+        var moduleAge = PipelineWatch.ModuleDataAgeMs;
+        PerfSummary =
+            $"module data {(moduleAge < 0 ? "none yet" : $"{moduleAge:F0} ms ago")}   |   " +
+            $"{PipelineWatch.LastSummary}";
 
         // Badge + switch state. The switch needs a module new enough to
         // publish Mode/ActiveSource; older files leave ActiveSource empty.
