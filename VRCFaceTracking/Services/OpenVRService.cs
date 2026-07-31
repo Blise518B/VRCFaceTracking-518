@@ -23,29 +23,78 @@ public class OpenVRService
     {
         EVRInitError error = EVRInitError.None;
         _system = OpenVR.Init(ref error, EVRApplicationType.VRApplication_Background);
-        
+
         if (error != EVRInitError.None)
         {
             _logger.LogWarning("Failed to initialize OpenVR: {0}", error);
             IsInitialized = false;
             return IsInitialized;
         }
-        
-        // Our app.vrmanifest is next to the executable, so we can just use the current directory of the executable
-        var currentDirectory = Path.GetDirectoryName(Assembly.GetEntryAssembly()?.Location);
-        var fullManifestPath = Path.Combine(currentDirectory, "app.vrmanifest"); // Replace is for Linux
-        var manifestRegisterResult = OpenVR.Applications.AddApplicationManifest(fullManifestPath, false);
-        if (manifestRegisterResult != EVRApplicationError.None)
-        {
-            _logger.LogWarning("Failed to register manifest: {0}", manifestRegisterResult);
-            IsInitialized = false;
-            return IsInitialized;
-        }
-        
-        _logger.LogInformation("Successfully initialized OpenVR");
-        
+
+        // A working OpenVR CONNECTION is what everything else needs (headset
+        // identity, auto-launch toggles). Manifest registration is a separate
+        // best-effort concern: failing it used to mark the whole service dead,
+        // which also silently disabled every consumer of the connection.
         IsInitialized = true;
+        _logger.LogInformation("Successfully initialized OpenVR");
+
+        RegisterManifest();
         return IsInitialized;
+    }
+
+    private void RegisterManifest()
+    {
+        var currentDirectory = Path.GetDirectoryName(Assembly.GetEntryAssembly()?.Location);
+        if (string.IsNullOrEmpty(currentDirectory))
+        {
+            return;
+        }
+        var manifestPath = Path.Combine(currentDirectory, "app.vrmanifest");
+
+        var result = OpenVR.Applications.AddApplicationManifest(manifestPath, false);
+        if (result == EVRApplicationError.None)
+        {
+            return;
+        }
+
+        // SteamVR rejects re-registering an app key from a new location while
+        // an old one is on file (measured: a dev-folder registration made every
+        // install-folder registration fail with InvalidManifest). Ask SteamVR
+        // where the old binary lived, evict that manifest, and retry once.
+        try
+        {
+            var err = EVRApplicationError.None;
+            var sb = new System.Text.StringBuilder(512);
+            OpenVR.Applications.GetApplicationPropertyString(
+                AppKey, EVRApplicationProperty.BinaryPath_String, sb, 512, ref err);
+            if (err == EVRApplicationError.None && sb.Length > 0)
+            {
+                var oldDir = Path.GetDirectoryName(sb.ToString());
+                if (!string.IsNullOrEmpty(oldDir))
+                {
+                    var oldManifest = Path.Combine(oldDir, "app.vrmanifest");
+                    if (!string.Equals(oldManifest, manifestPath, StringComparison.OrdinalIgnoreCase))
+                    {
+                        _logger.LogInformation(
+                            "Evicting stale SteamVR registration from {old} and re-registering from {new}",
+                            oldManifest, manifestPath);
+                        OpenVR.Applications.RemoveApplicationManifest(oldManifest);
+                        result = OpenVR.Applications.AddApplicationManifest(manifestPath, false);
+                    }
+                }
+            }
+        }
+        catch (Exception e)
+        {
+            _logger.LogWarning("Manifest re-registration attempt failed: {0}", e.Message);
+        }
+
+        if (result != EVRApplicationError.None)
+        {
+            _logger.LogWarning(
+                "Failed to register manifest ({0}) - SteamVR auto-launch of this app may not work, everything else is unaffected.",
+                result);
+        }
     }
 
     public void InitIfNotAlready()
