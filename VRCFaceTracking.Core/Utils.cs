@@ -21,6 +21,54 @@ public static class Utils
     [DllImport("winmm.dll", EntryPoint = "timeEndPeriod", SetLastError = true)]
     public static extern uint TimeEndPeriod(uint uMilliseconds);
 
+    [StructLayout(LayoutKind.Sequential)]
+    private struct PROCESS_POWER_THROTTLING_STATE
+    {
+        public uint Version;
+        public uint ControlMask;
+        public uint StateMask;
+    }
+
+    private const int ProcessPowerThrottling = 4;
+    private const uint PROCESS_POWER_THROTTLING_CURRENT_VERSION = 1;
+    private const uint PROCESS_POWER_THROTTLING_IGNORE_TIMER_RESOLUTION = 0x4;
+
+    [DllImport("kernel32.dll", SetLastError = true)]
+    private static extern bool SetProcessInformation(IntPtr hProcess, int processInformationClass,
+        ref PROCESS_POWER_THROTTLING_STATE processInformation, uint processInformationSize);
+
+    /// <summary>
+    /// Windows 11 silently ignores TimeBeginPeriod for processes whose windows are
+    /// minimized or fully occluded - which describes this app for an entire VR session,
+    /// exactly when the 100Hz send loop matters. Measured: Task.Delay(10) ticked at
+    /// 15.6ms (67Hz) despite TimeBeginPeriod(1). This opts out of that coalescing so
+    /// the requested resolution is honored while the user is in the headset.
+    /// No-op (returns false) on OSes without the setting.
+    /// </summary>
+    public static bool HonorTimerResolutionWhileMinimized()
+    {
+        if (!OperatingSystem.IsWindows())
+        {
+            return false;
+        }
+
+        try
+        {
+            var state = new PROCESS_POWER_THROTTLING_STATE
+            {
+                Version = PROCESS_POWER_THROTTLING_CURRENT_VERSION,
+                ControlMask = PROCESS_POWER_THROTTLING_IGNORE_TIMER_RESOLUTION,
+                StateMask = 0,
+            };
+            return SetProcessInformation(Process.GetCurrentProcess().Handle, ProcessPowerThrottling,
+                ref state, (uint)Marshal.SizeOf<PROCESS_POWER_THROTTLING_STATE>());
+        }
+        catch (Exception)
+        {
+            return false;
+        }
+    }
+
     // Proc memory read helpers
     public const int PROCESS_VM_READ = 0x0010;
 

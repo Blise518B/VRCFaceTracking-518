@@ -74,6 +74,12 @@ public class MainStandalone : IMainService
         if (isWindows)
         {
             Utils.TimeBeginPeriod(1);
+
+            // Without this, Windows 11 ignores the 1ms request whenever the window is
+            // minimized/occluded (i.e. the whole VR session) and the 10ms send loop
+            // ticks at 15.6ms instead - measured live by PipelineWatch.
+            var honored = Utils.HonorTimerResolutionWhileMinimized();
+            _logger.LogDebug("Timer-resolution coalescing opt-out: {result}", honored ? "applied" : "not available");
         }
 
         return Task.CompletedTask;
