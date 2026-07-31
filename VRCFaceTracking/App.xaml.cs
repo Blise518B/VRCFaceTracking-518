@@ -249,7 +249,20 @@ public partial class App : Application
         await App.GetService<ModuleActivationService>().InitializeAsync();
 
         // Companion app launch commands for the Sources page buttons, then bring up
-        // anything marked "launch with VRCFT" (skips apps that are already running)
+        // anything marked "launch with VRCFT". The Dream Air stack is gated on
+        // SteamVR's active headset actually being a Pimax; while the headset is
+        // still unknown the pass defers and the hot-swap watcher retries later.
+        CompanionAppService.HmdResolver = () =>
+        {
+            try
+            {
+                return GetService<OpenVRService>().GetHmdIdentity();
+            }
+            catch (Exception)
+            {
+                return null;
+            }
+        };
         var companions = App.GetService<CompanionAppService>();
         await companions.InitializeAsync();
         companions.LaunchConfiguredAtStartup();

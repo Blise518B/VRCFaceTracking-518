@@ -58,6 +58,46 @@ public class OpenVRService
     
     public bool IsInitialized { get; private set; }
 
+    /// <summary>
+    /// Identity of the active SteamVR headset ("Manufacturer Model TrackingSystem",
+    /// e.g. "Oculus Quest Pro oculus" or "Pimax Dream Air aapvr"), or null when
+    /// SteamVR is not up or no HMD is connected. Used to decide which companion
+    /// apps belong to the headset actually in use.
+    /// </summary>
+    public string? GetHmdIdentity()
+    {
+        if (!IsInitialized || _system == null)
+        {
+            return null;
+        }
+
+        try
+        {
+            var parts = new List<string>();
+            var sb = new System.Text.StringBuilder(128);
+            foreach (var prop in new[]
+                     {
+                         ETrackedDeviceProperty.Prop_ManufacturerName_String,
+                         ETrackedDeviceProperty.Prop_ModelNumber_String,
+                         ETrackedDeviceProperty.Prop_TrackingSystemName_String,
+                     })
+            {
+                sb.Clear();
+                var err = ETrackedPropertyError.TrackedProp_Success;
+                _system.GetStringTrackedDeviceProperty(OpenVR.k_unTrackedDeviceIndex_Hmd, prop, sb, 128, ref err);
+                if (err == ETrackedPropertyError.TrackedProp_Success && sb.Length > 0)
+                {
+                    parts.Add(sb.ToString());
+                }
+            }
+            return parts.Count > 0 ? string.Join(" ", parts) : null;
+        }
+        catch (Exception)
+        {
+            return null;
+        }
+    }
+
     public bool AutoStart
     {
         get => IsInitialized && OpenVR.Applications.GetApplicationAutoLaunch(AppKey);

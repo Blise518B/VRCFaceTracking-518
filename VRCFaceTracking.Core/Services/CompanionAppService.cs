@@ -66,6 +66,39 @@ public class CompanionAppService
             { TrackingSourceDetector.EtvrSourceName, "Virtual Desktop" },
         };
 
+    /// <summary>
+    /// Asks the app layer which headset SteamVR considers active. Null while
+    /// SteamVR is down or no HMD is connected.
+    /// </summary>
+    public static Func<string?>? HmdResolver;
+
+    /// <summary>
+    /// The Dream Air stack only auto-launches when SteamVR's active headset IS
+    /// the Pimax. Unknown headset = defer (the hot-swap watcher fires the pass
+    /// again once SteamVR reveals it) rather than launching blind. "aapvr" is
+    /// the Pimax SteamVR driver's tracking-system name.
+    /// </summary>
+    private static readonly string[] RequiresPimaxHmd =
+    {
+        TrackingSourceDetector.BrokenEyeSourceName,
+        TrackingSourceDetector.EtvrSourceName,
+        TrackingSourceDetector.BabbleSourceName,
+    };
+
+    private static readonly string[] PimaxHmdKeywords = { "pimax", "dream", "aapvr" };
+
+    private static (bool? IsPimax, string? Identity) ProbeHmd()
+    {
+        var identity = HmdResolver?.Invoke();
+        if (string.IsNullOrWhiteSpace(identity))
+        {
+            return (null, null);
+        }
+
+        var lower = identity.ToLowerInvariant();
+        return (PimaxHmdKeywords.Any(k => lower.Contains(k)), identity);
+    }
+
     public CompanionAppService(
         ILocalSettingsService localSettingsService,
         TrackingSourceDetector? detector = null,
@@ -134,14 +167,16 @@ public class CompanionAppService
 
     /// <summary>
     /// Starts every companion app marked "launch with VRCFT" whose source isn't already
-    /// live. Called once during app startup; idempotent by construction (already-running
-    /// apps are skipped), so watchdog relaunches after a crash never spawn duplicates.
+    /// live. Runs at startup and again whenever the active headset changes; idempotent
+    /// by construction (already-running apps are skipped), so repeated passes and
+    /// watchdog relaunches never spawn duplicates.
     /// </summary>
     public int LaunchConfiguredAtStartup()
     {
         // One forced scan up front so the skip decisions see current reality.
         var statuses = _detector?.Scan(force: true);
         var launched = 0;
+        var (isPimax, hmdIdentity) = ProbeHmd();
 
         foreach (var source in TrackingSourceDetector.KnownSources)
         {
@@ -155,6 +190,24 @@ public class CompanionAppService
             {
                 _logger?.LogInformation("Companion app for {source} already running - not launching", source.Name);
                 continue;
+            }
+
+            if (RequiresPimaxHmd.Contains(source.Name, StringComparer.OrdinalIgnoreCase))
+            {
+                if (isPimax == false)
+                {
+                    _logger?.LogInformation(
+                        "Skipping auto-launch of {source}: the active headset is \"{hmd}\", not a Pimax. Launch manually from the Launch Apps page if wanted.",
+                        source.Name, hmdIdentity);
+                    continue;
+                }
+                if (isPimax == null)
+                {
+                    _logger?.LogInformation(
+                        "Deferring auto-launch of {source}: no headset visible yet - it starts automatically once SteamVR reports a Pimax.",
+                        source.Name);
+                    continue;
+                }
             }
 
             if (AutoLaunchConflicts.TryGetValue(source.Name, out var rival)
