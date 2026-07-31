@@ -52,9 +52,57 @@ public class CompanionAppService
         new Dictionary<string, string[]>(StringComparer.OrdinalIgnoreCase)
         {
             { TrackingSourceDetector.BrokenEyeSourceName, new[] { "BrokenEye" } },
-            { TrackingSourceDetector.EtvrSourceName, new[] { "eyetrackapp", "EyeTrackVR", "EyeTrackApp" } },
+            { TrackingSourceDetector.EtvrSourceName, new[] { "eyetrackapp", "EyeTrackVR" } },
             { TrackingSourceDetector.BabbleSourceName, new[] { "Baballonia.Desktop", "Baballonia", "BabbleApp" } },
         };
+
+    /// <summary>
+    /// Words that mark an executable as a companion utility rather than the tracking app
+    /// itself. Measured need: "EyeTrackVR Firmware Flashing Tool.exe" matched the EyeTrackVR
+    /// prefix and got saved as the launch command, so VRCFT would have opened the firmware
+    /// flasher every time it wanted the tracker.
+    /// </summary>
+    private static readonly string[] NotTheTrackingApp =
+    {
+        "firmware", "flash", "install", "setup", "uninstall", "update", "crash", "debug", "config",
+    };
+
+    /// <summary>
+    /// Whether an executable's name is this source's actual app.
+    /// </summary>
+    /// <remarks>
+    /// Prefix matching alone is too loose - it has to accept version suffixes
+    /// ("BrokenEye_v1.4.0") while rejecting sibling tools ("EyeTrackVR Firmware Flashing
+    /// Tool"). The rule: after the prefix there may only be version-ish punctuation or
+    /// digits, never a space followed by more words.
+    /// </remarks>
+    private static bool IsExecutableFor(string fileName, string[] prefixes)
+    {
+        if (NotTheTrackingApp.Any(w => fileName.Contains(w, StringComparison.OrdinalIgnoreCase)))
+        {
+            return false;
+        }
+
+        foreach (var prefix in prefixes)
+        {
+            if (fileName.Equals(prefix, StringComparison.OrdinalIgnoreCase))
+            {
+                return true;
+            }
+
+            if (fileName.Length > prefix.Length &&
+                fileName.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
+            {
+                var next = fileName[prefix.Length];
+                if (next is '_' or '-' or '.' or 'v' or 'V' || char.IsDigit(next))
+                {
+                    return true;
+                }
+            }
+        }
+
+        return false;
+    }
 
     /// <summary>Roots worth searching, cheapest and most likely first.</summary>
     private static IEnumerable<string> DiscoveryRoots()
@@ -143,7 +191,7 @@ public class CompanionAppService
             {
                 try
                 {
-                    if (!prefixes.Any(p => process.ProcessName.StartsWith(p, StringComparison.OrdinalIgnoreCase)))
+                    if (!IsExecutableFor(process.ProcessName, prefixes))
                     {
                         continue;
                     }
@@ -178,8 +226,7 @@ public class CompanionAppService
         {
             foreach (var file in Directory.EnumerateFiles(directory, "*.exe"))
             {
-                var name = Path.GetFileNameWithoutExtension(file);
-                if (prefixes.Any(p => name.StartsWith(p, StringComparison.OrdinalIgnoreCase)))
+                if (IsExecutableFor(Path.GetFileNameWithoutExtension(file), prefixes))
                 {
                     return file;
                 }

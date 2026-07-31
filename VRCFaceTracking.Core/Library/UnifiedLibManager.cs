@@ -851,6 +851,17 @@ public class UnifiedLibManager : ILibManager
 
     private void InitialiseSandboxesBaseOnPaths(IEnumerable<string> paths)
     {
+        // The crash supervisor starts in the constructor and does its own hot-plug pass
+        // every ~10s, so it can reach this before Initialize() has created the sandbox
+        // host - on a slow startup that produced "Object reference not set to an instance
+        // of an object. Failed to start sandbox process", and the module only came up on
+        // the supervisor's next sweep. Nothing to do yet; Initialize() will start these.
+        if ( _sandboxServer == null )
+        {
+            _logger.LogDebug("Sandbox host is not running yet - leaving module startup to Initialize().");
+            return;
+        }
+
         foreach ( var dll in paths )
         {
             try
