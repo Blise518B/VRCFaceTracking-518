@@ -103,9 +103,12 @@ public partial class App : Application
             logging.ClearProviders();
             logging.AddDebug();
             logging.AddConsole();
-            logging.AddSentry(o =>
-                o.Dsn =
-                    "https://444b0799dd2b670efa85d866c8c12134@o4506152235237376.ingest.us.sentry.io/4506152246575104");
+            // NO Sentry in this fork. Upstream's DSN was still hardcoded here, so every
+            // crash in this heavily-modified build - including bugs that exist only in
+            // fork code - was filed into the upstream maintainer's error tracker as a
+            // VRCFaceTracking crash, and every user's crash telemetry went to a third
+            // party they never agreed to. CrashReportService writes a far more useful
+            // local report to Documents\VRCFaceTracking\crashes\ instead.
             logging.AddProvider(new OutputLogProvider(DispatcherQueue.GetForCurrentThread()));
             logging.AddProvider(new LogFileProvider());
         }).
@@ -199,24 +202,9 @@ public partial class App : Application
     {
         base.OnLaunched(args);
 
-        SentrySdk.Init(o =>
-        {
-            o.Dsn = "https://444b0799dd2b670efa85d866c8c12134@o4506152235237376.ingest.sentry.io/4506152246575104";
-            o.TracesSampleRate = 1.0;
-            o.AutoSessionTracking = true;
-            #if DEBUG
-            o.Environment = "debug";
-            #else
-            o.Environment = "release";
-            #endif
-            var version = Assembly.GetEntryAssembly()?.GetName().Version;
-            if (version != null)
-            {
-                o.Release = $"{version.Major}.{version.Minor}.{version.Build}.{version.Revision}";
-            }
-
-            o.IsGlobalModeEnabled = true;
-        });
+        // Deliberately no SentrySdk.Init - see the logging configuration for why this
+        // fork does not report to upstream's Sentry project. Crashes are captured
+        // locally by CrashReportService, which knows about this fork's own subsystems.
         Current.UnhandledException += ExceptionHandler;
 
         // Current.UnhandledException only covers exceptions reaching the UI thread.
