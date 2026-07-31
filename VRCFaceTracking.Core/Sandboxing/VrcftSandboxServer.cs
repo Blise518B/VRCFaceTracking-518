@@ -33,6 +33,9 @@ public class VrcftSandboxServer : UdpFullDuplex
         Port = ( ( IPEndPoint )_receivingUdpClient.Client.LocalEndPoint ).Port;
         _logger.LogInformation($"Starting sandbox host on port {Port}...");
         _isConnected = true;
+
+        OnReceiveError = e => _logger.LogWarning(
+            "Sandbox host recovered from an error while handling a module packet: {message}", e.Message);
     }
 
     public override void OnBytesReceived(in byte[] data, in IPEndPoint endpoint)

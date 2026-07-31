@@ -128,12 +128,29 @@ public class UdpFullDuplex : IDisposable
             {
                 // Ignore if disposed. This happens when closing the listener
             }
-            catch (SocketException e)
+            catch (SocketException)
             {
                 // This happens when a module terminates / crashes / is shut down
             }
+            catch (Exception e)
+            {
+                // The receive loop must survive ANY handler fault. Without this catch,
+                // one bad packet faults this task and IPC reception stops permanently
+                // for every module - tracking freezes with nothing in the log to say
+                // why, until each module hits its 60s no-packet timeout and is killed.
+                // (Reached for real: the packet handler used to index the module list
+                // with a -1 "not found" sentinel whenever a torn-down module's last
+                // frames arrived after its entry was gone.)
+                OnReceiveError?.Invoke(e);
+            }
         }
     }
+
+    /// <summary>
+    /// Raised when a receive iteration threw something unexpected. The loop keeps
+    /// running either way; this exists so the failure is logged rather than silent.
+    /// </summary>
+    public Action<Exception>? OnReceiveError;
 
     private void ReceiveThread()
     {

@@ -489,293 +489,365 @@ public class UnifiedLibManager : ILibManager
             // @TODO: Figure out an elegant way to ask the GUI for the ports the user assigned to the OSCTarget.
             int[] reservedPorts = new int[2] { 9000, 9001 };
             _sandboxServer = new VrcftSandboxServer(_loggerFactory, reservedPorts);
-            _sandboxServer.OnPacketReceived += (in IpcPacket packet, in int port) =>
-            {
-                // Get sandbox module internal index
-                int moduleIndex = -1;
-                for ( int i = 0; i < AvailableSandboxModules.Count; i++ )
-                {
-                    if ( AvailableSandboxModules[i].SandboxProcessPort == port )
-                    {
-                        moduleIndex = i;
-                        break;
-                    }
-                }
-
-                switch ( packet.GetPacketType() )
-                {
-                    // @TODO: Move these all into methods to make the code easier to maintain
-                    case IpcPacket.PacketType.Handshake:
-                        {
-                            // Look for the PID in the added modules list
-                            var pkt = (HandshakePacket) packet;
-                            lock ( AvailableSandboxModules )
-                            {
-                                bool pidRegistered = false;
-                                
-                                for ( int i = 0; i < AvailableSandboxModules.Count; i++ )
-                                {
-                                    if ( AvailableSandboxModules[i].SandboxProcessPID == pkt.PID )
-                                    {
-                                        var structCopy = AvailableSandboxModules[i];
-                                        structCopy.SandboxProcessPort = port;
-                                        AvailableSandboxModules[i] = structCopy;
-
-                                        _logger.LogInformation("Initializing {module}...", AvailableSandboxModules[i].ModuleClassName.ToString());
-                                        AttemptSandboxedModuleInitialize(AvailableSandboxModules[i]);
-                                        pidRegistered = true;
-
-                                        break;
-                                    }
-                                }
-
-                                if ( pidRegistered == false )
-                                {
-                                    Process sandboxProcess = Process.GetProcessById(pkt.PID);
-
-                                    ModuleRuntimeInfo runtimeInfo = new ModuleRuntimeInfo()
-                                    {
-                                        SandboxProcessPID   = pkt.PID,
-                                        SandboxProcessPort  = port,
-                                        SandboxModulePath   = pkt.ModulePath,
-                                        IsActive            = true,
-                                        Process             = sandboxProcess,
-                                        ModuleClassName     = Path.GetFileNameWithoutExtension(pkt.ModulePath),
-                                        ModuleInformation   = new (),
-                                        EventBus            = new (),
-                                    };
-                                    AvailableSandboxModules.Add(runtimeInfo);
-
-                                    _logger.LogInformation("Initializing {module}...", runtimeInfo.ModuleClassName);
-                                    AttemptSandboxedModuleInitialize(runtimeInfo);
-                                    pidRegistered = true;
-                                }
-                            }
-                            break;
-                        }
-
-                    case IpcPacket.PacketType.EventLog:
-                        {
-                            EventLogPacket eventLogPacket = (EventLogPacket) packet;
-                            _moduleLogger.Log(eventLogPacket.LogLevel, eventLogPacket.Message);
-                            break;
-                        }
-
-                    case IpcPacket.PacketType.ReplyGetSupported:
-                        {
-                            // We now know whether or not the module supports face or eye tracking
-                            ReplySupportedPacket replySupportedPacket = (ReplySupportedPacket) packet;
-
-                            AvailableSandboxModules[moduleIndex].SupportsEyeTracking        = AvailableSandboxModules[moduleIndex].SupportsEyeTracking && replySupportedPacket.eyeAvailable;
-                            AvailableSandboxModules[moduleIndex].SupportsExpressionTracking = AvailableSandboxModules[moduleIndex].SupportsExpressionTracking && replySupportedPacket.expressionAvailable;
-
-                            // Now tell it to initialise
-                            EventInitPacket eventInitPacket = new EventInitPacket()
-                            {
-                                expressionAvailable     = ExpressionStatus == ModuleState.Uninitialized,
-                                eyeAvailable            = EyeStatus == ModuleState.Uninitialized,
-                            };
-                            _logger.LogInformation("Got supported for module {module}. Expr: {} Eye: {}...",
-                                AvailableSandboxModules[moduleIndex].ModuleClassName,
-                                eventInitPacket.expressionAvailable,
-                                eventInitPacket.eyeAvailable);
-                            _sandboxServer.SendData(eventInitPacket, port);
-                            break;
-                        }
-
-                    case IpcPacket.PacketType.ReplyInit:
-                        {
-                            ReplyInitPacket replyInitPacket = (ReplyInitPacket) packet;
-                            AvailableSandboxModules[moduleIndex].ModuleInformation.Name = replyInitPacket.ModuleInformationName;
-
-                            // Update support variables
-                            AvailableSandboxModules[moduleIndex].SupportsEyeTracking        = AvailableSandboxModules[moduleIndex].SupportsEyeTracking && replyInitPacket.eyeSuccess;
-                            AvailableSandboxModules[moduleIndex].SupportsExpressionTracking = AvailableSandboxModules[moduleIndex].SupportsExpressionTracking && replyInitPacket.expressionSuccess;
-
-                            _logger.LogInformation("Got init for module {module}. Eye: {eye} Expr: {expr}...",
-                                AvailableSandboxModules[moduleIndex].ModuleClassName,
-                                replyInitPacket.eyeSuccess,
-                                replyInitPacket.eyeSuccess);
-
-                            // Skip any modules that don't succeed, otherwise set UnifiedLib to have these states active and add module to module list.
-                            if ( !replyInitPacket.eyeSuccess && !replyInitPacket.expressionSuccess )
-                            {
-                                break;
-                            }
-
-                            int portCopy = port; // So that we can use it in the lambda method
-                            AvailableSandboxModules[moduleIndex].ModuleInformation.OnActiveChange = (state) =>
-                            {
-                                AvailableSandboxModules[moduleIndex].Status = state ? ModuleState.Active : ModuleState.Idle;
-
-                                EventStatusUpdatePacket statusUpdatePkt = new EventStatusUpdatePacket();
-                                statusUpdatePkt.ModuleState = AvailableSandboxModules[moduleIndex].Status;
-                                _sandboxServer.SendData(statusUpdatePkt, portCopy);
-                            };
-
-                            EyeStatus           = replyInitPacket.eyeSuccess        ? ModuleState.Active : ModuleState.Uninitialized;
-                            ExpressionStatus    = replyInitPacket.expressionSuccess ? ModuleState.Active : ModuleState.Uninitialized;
-
-                            AvailableSandboxModules[moduleIndex].ModuleInformation.Active           = true;
-                            AvailableSandboxModules[moduleIndex].ModuleInformation.UsingEye         = !AvailableSandboxModules.Any(m => m.ModuleInformation.UsingEye) && replyInitPacket.eyeSuccess;
-                            AvailableSandboxModules[moduleIndex].ModuleInformation.UsingExpression  = !AvailableSandboxModules.Any(m => m.ModuleInformation.UsingExpression) && replyInitPacket.expressionSuccess;
-                            AvailableSandboxModules[moduleIndex].ModuleInformation.StaticImages     = replyInitPacket.IconDataStreams;
-                            EnsureModuleThreadStartedSandboxed(AvailableSandboxModules[moduleIndex]);
-
-                            _dispatcherService.Run(() => {
-
-                                // This module just came up, so any dormant card standing in for
-                                // it is stale. Cleared by dll rather than by name: the dormant
-                                // card is named from the manifest ("ETVR Tracking Module") and
-                                // the live one names itself ("ETVR Eye Tracking module"), so the
-                                // name compare below never pairs them and the module ends up
-                                // listed as in-use AND not-in-use at the same time.
-                                RemoveDormantCardFor(AvailableSandboxModules[moduleIndex].SandboxModulePath);
-
-                                // Check if the module is already loaded on the user-facing side. If so, overwrite with the new module if it's unloaded
-                                var isModuleLoaded = false;
-                                for ( var i = 0; i < LoadedModulesMetadata.Count; i++ )
-                                {
-                                    // Look for modules with the same name
-                                    if ( LoadedModulesMetadata[i].Name == AvailableSandboxModules[moduleIndex].ModuleInformation.Name )
-                                    {
-                                        // Update module info
-                                        LoadedModulesMetadata[i] = AvailableSandboxModules[moduleIndex].ModuleInformation;
-                                        isModuleLoaded = true;
-                                        break;
-                                    }
-                                }
-
-                                // Add it to list if it was never loaded
-                                if ( isModuleLoaded == false )
-                                {
-                                    LoadedModulesMetadata.Add(AvailableSandboxModules[moduleIndex].ModuleInformation);
-                                }
-
-                                if ( AvailableSandboxModules.Count == 0 )
-                                {
-                                    _logger.LogWarning("No modules loaded.");
-                                    LoadedModulesMetadata.Clear();
-                                    LoadedModulesMetadata.Add(new ModuleMetadataInternal
-                                    {
-                                        Active = false,
-                                        Name = "No Modules Loaded"
-                                    });
-                                }
-                                else
-                                {
-                                    // Remove our dummy module
-                                    if ( LoadedModulesMetadata.Count > 0 &&
-                                        LoadedModulesMetadata[0].Active == false &&
-                                           (LoadedModulesMetadata[0].Name == "No Modules Loaded" ||
-                                            LoadedModulesMetadata[0].Name == "Initializing Modules..." ))
-                                    {
-                                        LoadedModulesMetadata.RemoveAt(0);
-                                    }
-
-                                    // foreach ( var pair in _moduleThreads )
-                                    {
-                                        if ( AvailableSandboxModules[moduleIndex].ModuleInformation.Active )
-                                        {
-                                            _logger.LogInformation("Tracking initialized via {module}", AvailableSandboxModules[moduleIndex].ModuleClassName.ToString());
-                                        }
-                                    }
-                                }
-                            });
-
-                            break;
-                        }
-                    case IpcPacket.PacketType.ReplyUpdate:
-                        {
-                            ReplyUpdatePacket replyUpdatePacket = (ReplyUpdatePacket) packet;
-
-                            // Input-side heartbeat: lets the perf watch tell "module went
-                            // silent" apart from "our pipeline stalled" when tracking freezes.
-                            PipelineWatch.RecordModuleData();
-
-                            if ( AvailableSandboxModules[moduleIndex].Status == ModuleState.Active && AvailableSandboxModules[moduleIndex].ModuleInformation.Active )
-                            {
-                                if ( AvailableSandboxModules[moduleIndex].ModuleInformation.UsingEye )
-                                {
-                                    replyUpdatePacket.UpdateGlobalEyeState();
-                                }
-                                if ( AvailableSandboxModules[moduleIndex].ModuleInformation.UsingExpression )
-                                {
-                                    replyUpdatePacket.UpdateGlobalExpressionState();
-                                }
-                                replyUpdatePacket.UpdateHeadState();
-                            }
-
-                            break;
-                        }
-                }
-            };
+            _sandboxServer.OnPacketReceived += (in IpcPacket packet, in int port) => HandleModulePacket(packet, port);
         }
 
-        // Start Initialization
+        // Start Initialization.
+        //
+        // The body is wrapped because an unhandled exception on a plain Thread kills the
+        // whole PROCESS - a failed teardown or a module list that changed mid-iteration
+        // used to take VRCFaceTracking down rather than just failing to start a module.
         _initializeWorker = new Thread(() =>
         {
-            // Kill lingering threads
-            TeardownAllAndResetAsync();
-
-            // Find all modules, then start only the ones whose tracking source is actually
-            // live. Without this every installed module spawns a process and races to claim
-            // the eye/expression slots, which wastes startup time and invites conflicts.
-            var modules = _moduleDataService.GetInstalledModules().Concat(_moduleDataService.GetLegacyModules()).ToList();
-            var modulePaths = _moduleActivationService.FilterStartablePaths(modules);
-
-            if (modulePaths.Count < modules.Count)
+            try
             {
-                _logger.LogInformation(
-                    "Source detection: starting {started} of {total} installed modules. See the Sources page for why.",
-                    modulePaths.Count, modules.Count);
-
-                // List the skipped ones greyed out instead of dropping them: a module that
-                // silently disappears looks uninstalled rather than idle.
-                var skipped = _moduleActivationService.Evaluate(modules).Where(d => !d.WillStart).ToList();
-                _dispatcherService.Run(() =>
-                {
-                    foreach (var decision in skipped)
-                    {
-                        LoadedModulesMetadata.Add(new ModuleMetadataInternal
-                        {
-                            Name = decision.DisplayName,
-                            Active = false,
-                            IsDormant = true,
-                            StatusNote = decision.Reason,
-                            SourceDll = decision.DllName,
-                            StaticImages = new List<Stream>(),
-                        });
-                    }
-                });
+                InitializeModulesOnWorker();
             }
-
-            // Load all modules
-            AvailableSandboxModules.Clear();
-            InitialiseSandboxesBaseOnPaths(modulePaths.ToArray());
-
-            if ( AvailableSandboxModules != null && AvailableSandboxModules.Count > 0 )
+            catch ( Exception e )
             {
-                _logger.LogDebug("Initializing requested runtimes...");
+                _logger.LogError("Module initialization failed: {message}", e.Message);
             }
-            else
-            {
-                _dispatcherService.Run(() =>
-                {
-                    LoadedModulesMetadata.Clear();
-                    LoadedModulesMetadata.Add(new ModuleMetadataInternal
-                    {
-                        Active = false,
-                        Name = "No Modules Loaded"
-                    });
-                });
-                _logger.LogWarning("No modules loaded.");
-            }
-
         });
+        _initializeWorker.IsBackground = true;
         _logger.LogInformation("Starting initialization tracking");
         _initializeWorker.Start();
     }
+
+    /// <summary>
+    /// Tears down whatever is running, works out which modules should start for the
+    /// hardware that is actually live, and spawns them. Runs on the initialize worker.
+    /// </summary>
+    private void InitializeModulesOnWorker()
+    {
+        // Kill lingering threads
+        TeardownAllAndResetAsync();
+
+        // Find all modules, then start only the ones whose tracking source is actually
+        // live. Without this every installed module spawns a process and races to claim
+        // the eye/expression slots, which wastes startup time and invites conflicts.
+        var modules = _moduleDataService.GetInstalledModules().Concat(_moduleDataService.GetLegacyModules()).ToList();
+        var modulePaths = _moduleActivationService.FilterStartablePaths(modules);
+
+        if ( modulePaths.Count < modules.Count )
+        {
+            _logger.LogInformation(
+                "Source detection: starting {started} of {total} installed modules. See the Sources page for why.",
+                modulePaths.Count, modules.Count);
+
+            // List the skipped ones greyed out instead of dropping them: a module that
+            // silently disappears looks uninstalled rather than idle.
+            var skipped = _moduleActivationService.Evaluate(modules).Where(d => !d.WillStart).ToList();
+            _dispatcherService.Run(() =>
+            {
+                foreach ( var decision in skipped )
+                {
+                    LoadedModulesMetadata.Add(new ModuleMetadataInternal
+                    {
+                        Name = decision.DisplayName,
+                        Active = false,
+                        IsDormant = true,
+                        StatusNote = decision.Reason,
+                        SourceDll = decision.DllName,
+                        StaticImages = new List<Stream>(),
+                    });
+                }
+            });
+        }
+
+        // Load all modules
+        lock ( AvailableSandboxModules )
+        {
+            AvailableSandboxModules.Clear();
+        }
+        InitialiseSandboxesBaseOnPaths(modulePaths.ToArray());
+
+        int started;
+        lock ( AvailableSandboxModules )
+        {
+            started = AvailableSandboxModules.Count;
+        }
+
+        if ( started > 0 )
+        {
+            _logger.LogDebug("Initializing requested runtimes...");
+            return;
+        }
+
+        _dispatcherService.Run(() =>
+        {
+            LoadedModulesMetadata.Clear();
+            LoadedModulesMetadata.Add(new ModuleMetadataInternal
+            {
+                Active = false,
+                Name = "No Modules Loaded"
+            });
+        });
+        _logger.LogWarning("No modules loaded.");
+    }
+
+    #region Module IPC packet handling
+
+    /// <summary>
+    /// The module registered on a sandbox port, or null when none is.
+    /// </summary>
+    /// <remarks>
+    /// A null result is routine, not exceptional: a module that was just torn down keeps
+    /// sending for a moment after its entry is gone, and a hot-swap clears the whole list
+    /// while the outgoing module is still streaming at 100Hz. The code this replaced
+    /// searched for an index, left it at the -1 "not found" sentinel, and then indexed
+    /// the list with it - see <see cref="HandleModulePacket"/> for what that cost.
+    /// </remarks>
+    private ModuleRuntimeInfo? ModuleOnPort(int port)
+    {
+        lock ( AvailableSandboxModules )
+        {
+            foreach ( var module in AvailableSandboxModules )
+            {
+                if ( module.SandboxProcessPort == port )
+                {
+                    return module;
+                }
+            }
+        }
+
+        return null;
+    }
+
+    /// <summary>
+    /// Entry point for every packet a module sandbox sends us.
+    /// </summary>
+    /// <remarks>
+    /// Must never throw. This runs on the UDP receive loop, and an exception escaping it
+    /// faults that loop's task, which stops IPC reception for EVERY module permanently
+    /// and silently - tracking simply freezes until each module hits its 60s no-packet
+    /// timeout and gets killed. The loop now has a catch-all of its own as well; both
+    /// layers are deliberate, because this is the failure that has no symptom to debug.
+    /// </remarks>
+    private void HandleModulePacket(in IpcPacket packet, int port)
+    {
+        try
+        {
+            switch ( packet.GetPacketType() )
+            {
+                case IpcPacket.PacketType.Handshake:
+                    HandleHandshake((HandshakePacket) packet, port);
+                    break;
+
+                case IpcPacket.PacketType.EventLog:
+                    var logPacket = (EventLogPacket) packet;
+                    _moduleLogger.Log(logPacket.LogLevel, logPacket.Message);
+                    break;
+
+                case IpcPacket.PacketType.ReplyGetSupported:
+                    HandleReplySupported((ReplySupportedPacket) packet, port);
+                    break;
+
+                case IpcPacket.PacketType.ReplyInit:
+                    HandleReplyInit((ReplyInitPacket) packet, port);
+                    break;
+
+                case IpcPacket.PacketType.ReplyUpdate:
+                    HandleReplyUpdate((ReplyUpdatePacket) packet, port);
+                    break;
+            }
+        }
+        catch ( Exception e )
+        {
+            _logger.LogWarning("Failed to handle a {type} packet from module port {port}: {message}",
+                packet.GetPacketType(), port, e.Message);
+        }
+    }
+
+    /// <summary>
+    /// A sandbox process announcing itself. Either it is one we spawned (bind the port it
+    /// picked to our record of it) or one we have no record of, which is registered as-is.
+    /// </summary>
+    private void HandleHandshake(HandshakePacket packet, int port)
+    {
+        lock ( AvailableSandboxModules )
+        {
+            foreach ( var known in AvailableSandboxModules )
+            {
+                if ( known.SandboxProcessPID != packet.PID )
+                {
+                    continue;
+                }
+
+                known.SandboxProcessPort = port;
+                _logger.LogInformation("Initializing {module}...", known.ModuleClassName);
+                AttemptSandboxedModuleInitialize(known);
+                return;
+            }
+
+            var runtimeInfo = new ModuleRuntimeInfo
+            {
+                SandboxProcessPID   = packet.PID,
+                SandboxProcessPort  = port,
+                SandboxModulePath   = packet.ModulePath,
+                IsActive            = true,
+                Process             = Process.GetProcessById(packet.PID),
+                ModuleClassName     = Path.GetFileNameWithoutExtension(packet.ModulePath),
+                ModuleInformation   = new (),
+                EventBus            = new (),
+            };
+            AvailableSandboxModules.Add(runtimeInfo);
+
+            _logger.LogInformation("Initializing {module}...", runtimeInfo.ModuleClassName);
+            AttemptSandboxedModuleInitialize(runtimeInfo);
+        }
+    }
+
+    /// <summary>
+    /// The module has told us which tracking types it can do. Narrow our expectation to
+    /// the intersection, then ask it to initialize whichever slots are still unclaimed.
+    /// </summary>
+    private void HandleReplySupported(ReplySupportedPacket packet, int port)
+    {
+        var module = ModuleOnPort(port);
+        if ( module == null )
+        {
+            return;
+        }
+
+        module.SupportsEyeTracking        = module.SupportsEyeTracking && packet.eyeAvailable;
+        module.SupportsExpressionTracking = module.SupportsExpressionTracking && packet.expressionAvailable;
+
+        var initPacket = new EventInitPacket
+        {
+            expressionAvailable = ExpressionStatus == ModuleState.Uninitialized,
+            eyeAvailable        = EyeStatus == ModuleState.Uninitialized,
+        };
+
+        _logger.LogInformation("Got supported for module {module}. Expr: {expr} Eye: {eye}...",
+            module.ModuleClassName, initPacket.expressionAvailable, initPacket.eyeAvailable);
+        _sandboxServer.SendData(initPacket, port);
+    }
+
+    /// <summary>
+    /// The module has finished initializing. Claim the eye/expression slots it succeeded
+    /// at (first module to claim one keeps it), start its update pump, and list it.
+    /// </summary>
+    private void HandleReplyInit(ReplyInitPacket packet, int port)
+    {
+        var module = ModuleOnPort(port);
+        if ( module == null )
+        {
+            return;
+        }
+
+        module.ModuleInformation.Name     = packet.ModuleInformationName;
+        module.SupportsEyeTracking        = module.SupportsEyeTracking && packet.eyeSuccess;
+        module.SupportsExpressionTracking = module.SupportsExpressionTracking && packet.expressionSuccess;
+
+        _logger.LogInformation("Got init for module {module}. Eye: {eye} Expr: {expr}...",
+            module.ModuleClassName, packet.eyeSuccess, packet.expressionSuccess);
+
+        // Initialized nothing: no slots, no update pump, and nothing worth listing.
+        if ( !packet.eyeSuccess && !packet.expressionSuccess )
+        {
+            return;
+        }
+
+        // Assigned before Active is set below, because setting Active fires this.
+        module.ModuleInformation.OnActiveChange = state =>
+        {
+            module.Status = state ? ModuleState.Active : ModuleState.Idle;
+            _sandboxServer.SendData(new EventStatusUpdatePacket { ModuleState = module.Status }, port);
+        };
+
+        EyeStatus        = packet.eyeSuccess        ? ModuleState.Active : ModuleState.Uninitialized;
+        ExpressionStatus = packet.expressionSuccess ? ModuleState.Active : ModuleState.Uninitialized;
+
+        module.ModuleInformation.Active = true;
+        lock ( AvailableSandboxModules )
+        {
+            // This module is already in the list, and its own flags are still false here,
+            // so each Any() asks "does some OTHER module already own this slot?".
+            module.ModuleInformation.UsingEye =
+                !AvailableSandboxModules.Any(m => m.ModuleInformation.UsingEye) && packet.eyeSuccess;
+            module.ModuleInformation.UsingExpression =
+                !AvailableSandboxModules.Any(m => m.ModuleInformation.UsingExpression) && packet.expressionSuccess;
+        }
+        module.ModuleInformation.StaticImages = packet.IconDataStreams;
+
+        EnsureModuleThreadStartedSandboxed(module);
+
+        _dispatcherService.Run(() => PublishModuleCard(module));
+    }
+
+    /// <summary>
+    /// Puts a freshly initialized module on the modules page, replacing its dormant
+    /// placeholder and the startup filler row. UI thread only.
+    /// </summary>
+    private void PublishModuleCard(ModuleRuntimeInfo module)
+    {
+        // This module just came up, so any dormant card standing in for it is stale.
+        // Cleared by dll rather than by name: the dormant card is named from the manifest
+        // ("ETVR Tracking Module") and the live one names itself ("ETVR Eye Tracking
+        // module"), so the name compare below never pairs them and the module ends up
+        // listed as in-use AND not-in-use at the same time.
+        RemoveDormantCardFor(module.SandboxModulePath);
+
+        var replaced = false;
+        for ( var i = 0; i < LoadedModulesMetadata.Count; i++ )
+        {
+            if ( LoadedModulesMetadata[i].Name == module.ModuleInformation.Name )
+            {
+                LoadedModulesMetadata[i] = module.ModuleInformation;
+                replaced = true;
+                break;
+            }
+        }
+
+        if ( !replaced )
+        {
+            LoadedModulesMetadata.Add(module.ModuleInformation);
+        }
+
+        // Drop the placeholder row now that a real module is listed. Count > 1 so this
+        // can never empty the list, which would leave the page blank instead of informative.
+        if ( LoadedModulesMetadata.Count > 1 &&
+             !LoadedModulesMetadata[0].Active &&
+             ( LoadedModulesMetadata[0].Name == "No Modules Loaded" ||
+               LoadedModulesMetadata[0].Name == "Initializing Modules..." ) )
+        {
+            LoadedModulesMetadata.RemoveAt(0);
+        }
+
+        if ( module.ModuleInformation.Active )
+        {
+            _logger.LogInformation("Tracking initialized via {module}", module.ModuleClassName);
+        }
+    }
+
+    /// <summary>
+    /// One frame of tracking data. Only the module owning a slot may write to it, so a
+    /// second module can run alongside without fighting over the same expressions.
+    /// </summary>
+    private void HandleReplyUpdate(ReplyUpdatePacket packet, int port)
+    {
+        // Input-side heartbeat: lets the perf watch tell "the module went silent" apart
+        // from "our pipeline stalled" when tracking freezes.
+        PipelineWatch.RecordModuleData();
+
+        var module = ModuleOnPort(port);
+        if ( module is not { Status: ModuleState.Active } || !module.ModuleInformation.Active )
+        {
+            return;
+        }
+
+        if ( module.ModuleInformation.UsingEye )
+        {
+            packet.UpdateGlobalEyeState();
+        }
+        if ( module.ModuleInformation.UsingExpression )
+        {
+            packet.UpdateGlobalExpressionState();
+        }
+        packet.UpdateHeadState();
+    }
+
+    #endregion
 
     private void InitialiseSandboxesBaseOnPaths(IEnumerable<string> paths)
     {
@@ -985,51 +1057,69 @@ public class UnifiedLibManager : ILibManager
             moduleThreadsSnapshot = _moduleThreads.ToList();
         }
 
-        foreach ( var module in moduleThreadsSnapshot )
-        {
-            var success = false;
-            if (module == null || (module.Process?.HasExited ?? true))
-                continue;
-            try
-            {
-                success = TeardownModuleSandboxed(module);
-            } finally
-            {
-                if ( !success )
-                {
-                    _logger.LogWarning($"Module: {module.Module.ModuleInformation.Name} failed to shut down. Killing its thread.");
-                    module.UpdateThread.Interrupt();
-                }
-            }
-        }
+        TeardownEach(moduleThreadsSnapshot);
 
         lock ( _moduleThreadsLock )
         {
             _moduleThreads.Clear();
         }
 
-        foreach ( var module in AvailableSandboxModules )
+        // Snapshot under the lock rather than iterating the live list: a module handshake
+        // can Add to it from the IPC receive thread at any moment, and iterating through
+        // that throws "Collection was modified" - which, on the initialize worker thread,
+        // is an unhandled exception that takes the whole process down.
+        List<ModuleRuntimeInfo> sandboxSnapshot;
+        lock ( AvailableSandboxModules )
         {
-            var success = false;
-            if (module == null || (module.Process?.HasExited ?? true)) // c# objects may be null, use null coalesce to detect if a module has been destroyed but we have a lingering ref to it
-                continue;
-            try
-            {
-                success = TeardownModuleSandboxed(module);
-            } finally
-            {
-                if ( !success )
-                {
-                    var moduleName = module.ModuleInformation?.Name ?? module.ModuleClassName ?? "Unknown";
-                    _logger.LogWarning($"Module: {moduleName} failed to shut down. Killing its thread.");
-                    module.UpdateThread?.Interrupt();
-                }
-            }
+            sandboxSnapshot = AvailableSandboxModules.ToList();
+            AvailableSandboxModules.Clear();
         }
 
-        AvailableSandboxModules.Clear();
+        TeardownEach(sandboxSnapshot);
 
         EyeStatus = ModuleState.Uninitialized;
         ExpressionStatus = ModuleState.Uninitialized;
     }
+
+    /// <summary>
+    /// Tears down each still-running module, and force-interrupts the update thread of any
+    /// that would not go quietly. One module refusing to die never stops the others.
+    /// </summary>
+    private void TeardownEach(IEnumerable<ModuleRuntimeInfo> modules)
+    {
+        foreach ( var module in modules )
+        {
+            // Objects may be null or already destroyed while we hold a lingering reference
+            if ( module == null || ( module.Process?.HasExited ?? true ) )
+            {
+                continue;
+            }
+
+            var success = false;
+            try
+            {
+                success = TeardownModuleSandboxed(module);
+            }
+            catch ( Exception e )
+            {
+                _logger.LogWarning("Error tearing down {module}: {message}", ModuleNameOf(module), e.Message);
+            }
+            finally
+            {
+                if ( !success )
+                {
+                    _logger.LogWarning("Module: {module} failed to shut down. Killing its thread.", ModuleNameOf(module));
+                    module.UpdateThread?.Interrupt();
+                }
+            }
+        }
+    }
+
+    /// <summary>
+    /// Best available display name for a module. Never throws: this is used from failure
+    /// paths, where the previous code dereferenced the legacy <c>Module</c> field - always
+    /// null under sandboxing - and turned a failed teardown into a NullReferenceException.
+    /// </summary>
+    private static string ModuleNameOf(ModuleRuntimeInfo? module) =>
+        module?.ModuleInformation?.Name ?? module?.ModuleClassName ?? "Unknown";
 }
