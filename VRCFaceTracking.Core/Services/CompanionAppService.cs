@@ -29,18 +29,183 @@ public class CompanionAppService
     private bool _initialized;
 
     /// <summary>
-    /// Suggestions shown until the user sets their own command. Steam apps launch
-    /// through their store URI so Steam handles the working directory and updates.
-    /// Path defaults are this machine's installs and only apply while the file
-    /// exists, so they disappear cleanly instead of showing a broken button.
+    /// Launch commands that work on any machine. Steam apps go through their store URI
+    /// so Steam picks the working directory and handles updates.
     /// </summary>
     private static readonly IReadOnlyDictionary<string, string> Defaults =
         new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
         {
             { TrackingSourceDetector.BabbleSourceName, "steam://rungameid/4091970" },
-            { TrackingSourceDetector.BrokenEyeSourceName, @"C:\DIY-Projects\VRC-Coding\PimaxEyeTracking\Brokeneye1.4\BrokenEye_v1.4.0.exe" },
-            { TrackingSourceDetector.EtvrSourceName, @"C:\DIY-Projects\VRC-Coding\PimaxEyeTracking\EyeTrackVR\eyetrackapp.exe" },
         };
+
+    /// <summary>
+    /// Executable names to go looking for, per source, when no command is configured.
+    /// Matched by prefix so version-stamped names (BrokenEye_v1.4.0.exe) are found too.
+    /// </summary>
+    /// <remarks>
+    /// This replaced hardcoded absolute paths, which were whichever folders the author
+    /// happened to use. Those were dead weight on every other machine - a friend saw an
+    /// empty Launch Apps page and had to Browse for each app by hand - and they leaked
+    /// the author's directory layout into a public binary.
+    /// </remarks>
+    private static readonly IReadOnlyDictionary<string, string[]> DiscoverableExecutables =
+        new Dictionary<string, string[]>(StringComparer.OrdinalIgnoreCase)
+        {
+            { TrackingSourceDetector.BrokenEyeSourceName, new[] { "BrokenEye" } },
+            { TrackingSourceDetector.EtvrSourceName, new[] { "eyetrackapp", "EyeTrackVR", "EyeTrackApp" } },
+            { TrackingSourceDetector.BabbleSourceName, new[] { "Baballonia.Desktop", "Baballonia", "BabbleApp" } },
+        };
+
+    /// <summary>Roots worth searching, cheapest and most likely first.</summary>
+    private static IEnumerable<string> DiscoveryRoots()
+    {
+        static string? Folder(Environment.SpecialFolder f)
+        {
+            try { return Environment.GetFolderPath(f); } catch (Exception) { return null; }
+        }
+
+        var roots = new List<string?>
+        {
+            Folder(Environment.SpecialFolder.DesktopDirectory),
+            Folder(Environment.SpecialFolder.LocalApplicationData),
+            Folder(Environment.SpecialFolder.ApplicationData),
+            Folder(Environment.SpecialFolder.ProgramFiles),
+            Folder(Environment.SpecialFolder.ProgramFilesX86),
+        };
+
+        var profile = Folder(Environment.SpecialFolder.UserProfile);
+        if (!string.IsNullOrEmpty(profile))
+        {
+            roots.Add(Path.Combine(profile, "Downloads"));
+            roots.Add(Path.Combine(profile, "Documents"));
+        }
+
+        // Where this app itself lives - people often keep the VR stack together
+        try { roots.Add(Path.GetDirectoryName(AppContext.BaseDirectory)); } catch (Exception) { }
+
+        return roots.Where(r => !string.IsNullOrEmpty(r) && Directory.Exists(r)).Select(r => r!).Distinct();
+    }
+
+    private static readonly Dictionary<string, string?> DiscoveryCache = new(StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// Looks for a source's executable in the usual places. Bounded on purpose: two
+    /// directory levels below each root, so this stays a few hundred stat calls rather
+    /// than a full-disk crawl. Cached per session including the misses, because a miss
+    /// costs the same search as a hit.
+    /// </summary>
+    private static string? DiscoverExecutable(string sourceName)
+    {
+        lock (DiscoveryCache)
+        {
+            if (DiscoveryCache.TryGetValue(sourceName, out var cached))
+            {
+                return cached;
+            }
+        }
+
+        string? found = null;
+        if (DiscoverableExecutables.TryGetValue(sourceName, out var prefixes))
+        {
+            // A running instance is the best possible answer: it is the exact path, it
+            // costs nothing to ask, and it works no matter how unusual the install
+            // folder is - which a directory search never can.
+            found = PathOfRunningProcess(prefixes);
+
+            if (found == null)
+            {
+                foreach (var root in DiscoveryRoots())
+                {
+                    found = SearchForExecutable(root, prefixes, depth: 2);
+                    if (found != null)
+                    {
+                        break;
+                    }
+                }
+            }
+        }
+
+        lock (DiscoveryCache)
+        {
+            DiscoveryCache[sourceName] = found;
+        }
+        return found;
+    }
+
+    /// <summary>
+    /// Full path of a running process whose name matches one of <paramref name="prefixes"/>.
+    /// </summary>
+    private static string? PathOfRunningProcess(string[] prefixes)
+    {
+        try
+        {
+            foreach (var process in Process.GetProcesses())
+            {
+                try
+                {
+                    if (!prefixes.Any(p => process.ProcessName.StartsWith(p, StringComparison.OrdinalIgnoreCase)))
+                    {
+                        continue;
+                    }
+
+                    var path = process.MainModule?.FileName;
+                    if (!string.IsNullOrEmpty(path) && File.Exists(path))
+                    {
+                        return path;
+                    }
+                }
+                catch (Exception)
+                {
+                    // Protected or exited process - MainModule throws; just try the next
+                }
+                finally
+                {
+                    process.Dispose();
+                }
+            }
+        }
+        catch (Exception)
+        {
+            // Process enumeration unavailable; fall back to the directory search
+        }
+
+        return null;
+    }
+
+    private static string? SearchForExecutable(string directory, string[] prefixes, int depth)
+    {
+        try
+        {
+            foreach (var file in Directory.EnumerateFiles(directory, "*.exe"))
+            {
+                var name = Path.GetFileNameWithoutExtension(file);
+                if (prefixes.Any(p => name.StartsWith(p, StringComparison.OrdinalIgnoreCase)))
+                {
+                    return file;
+                }
+            }
+
+            if (depth <= 0)
+            {
+                return null;
+            }
+
+            foreach (var sub in Directory.EnumerateDirectories(directory))
+            {
+                var hit = SearchForExecutable(sub, prefixes, depth - 1);
+                if (hit != null)
+                {
+                    return hit;
+                }
+            }
+        }
+        catch (Exception)
+        {
+            // Unreadable or protected directory - just skip it
+        }
+
+        return null;
+    }
 
     /// <summary>
     /// Sources that auto-launch unless the user turns their toggle off. These two are
@@ -255,7 +420,19 @@ public class CompanionAppService
             return suggestion;
         }
 
-        return string.Empty;
+        // Nothing configured and no universal default: go and find it. Whatever turns
+        // up is saved, so the search happens once per machine rather than every time -
+        // and an app found while running stays configured after it closes.
+        var discovered = DiscoverExecutable(sourceName);
+        if (discovered != null)
+        {
+            _commands[sourceName] = discovered;
+            _logger?.LogInformation("Found {source} at {path}; remembering it as the launch command.",
+                sourceName, discovered);
+            _ = PersistAsync();
+        }
+
+        return discovered ?? string.Empty;
     }
 
     public bool IsConfigured(string sourceName) => !string.IsNullOrWhiteSpace(GetCommand(sourceName));
@@ -270,7 +447,9 @@ public class CompanionAppService
     {
         foreach (var source in TrackingSourceDetector.KnownSources)
         {
-            if (IsConfigured(source.Name) || Defaults.ContainsKey(source.Name))
+            if (IsConfigured(source.Name)
+                || Defaults.ContainsKey(source.Name)
+                || DiscoverableExecutables.ContainsKey(source.Name))
             {
                 yield return source.Name;
             }
