@@ -47,6 +47,15 @@ privately; it is listed here so the starting point is on the record.
   cadence, and a stall watchdog that logs where the time went.
 
 ### Fixed
+- **Headset swaps could end with no tracking at all.** Five causes fixed together:
+  the merged Dream Air eye module wasn't mapped to the BrokenEye source (it ships
+  under the stock ETVR name); a stale probe cache restarted a dead iFacialMocap
+  module forever; the module process's 60 s connection timeout shot modules that
+  legitimately take longer to initialize; a busy stream port counted as source
+  evidence no matter who owned it; and SteamVR's shutdown/restart cycle was ignored,
+  so the app got force-killed on SteamVR exit and kept a dead OpenVR handle after
+  SteamVR restarts. A **Restart tracking** button on the Sources page is the manual
+  override for anything automatic switching ever gets wrong.
 - **Tracking froze for ~0.5 s every few seconds.** Curve-profile auto-switching ran a
   blocking tracking-source scan (~430 ms measured) on the 100 Hz tracking thread every
   time its 5 s cache expired.
