@@ -87,6 +87,89 @@ public partial class TrackingDebugViewModel : ObservableRecipient
     private bool _suppressModeSend;
     private long _modeSendGraceUntil;
 
+    // Panic switches, backed by the Neutral Override mutation. Raw data keeps
+    // flowing; only the outgoing buffer is held at neutral, so untoggling is instant.
+    [ObservableProperty] private bool _eyesNeutral;
+    [ObservableProperty] private bool _faceNeutral;
+    private bool _suppressNeutralPush;
+    private Core.Params.Data.Mutation.NeutralOverride? _neutralMutation;
+
+    partial void OnEyesNeutralChanged(bool value) => PushNeutral(m => m.neutralEyes = value);
+    partial void OnFaceNeutralChanged(bool value) => PushNeutral(m => m.neutralFace = value);
+
+    private void PushNeutral(Action<Core.Params.Data.Mutation.NeutralOverride> apply)
+    {
+        if (_suppressNeutralPush)
+        {
+            return;
+        }
+
+        var mutation = FindNeutralMutation();
+        if (mutation == null)
+        {
+            return;
+        }
+
+        apply(mutation);
+        mutation.IsActive = true;
+
+        // A panic switch that silently does nothing because the mutation master
+        // toggle happens to be off is worse than none - force the chain on.
+        var mutator = App.GetService<UnifiedTrackingMutator>();
+        if (!mutator.Enabled)
+        {
+            mutator.Enabled = true;
+        }
+
+        _ = mutation.Save();
+    }
+
+    private Core.Params.Data.Mutation.NeutralOverride? FindNeutralMutation()
+    {
+        if (_neutralMutation != null)
+        {
+            return _neutralMutation;
+        }
+
+        try
+        {
+            _neutralMutation = App.GetService<UnifiedTrackingMutator>()
+                ._mutations.OfType<Core.Params.Data.Mutation.NeutralOverride>().FirstOrDefault();
+        }
+        catch (Exception)
+        {
+            // Mutations may not be published yet during startup; try again next tick
+        }
+        return _neutralMutation;
+    }
+
+    /// <summary>Reflect changes made on the Tracking Mutations page back into the toggles.</summary>
+    private void SyncNeutralFromMutation()
+    {
+        var mutation = FindNeutralMutation();
+        if (mutation == null)
+        {
+            return;
+        }
+
+        _suppressNeutralPush = true;
+        try
+        {
+            if (EyesNeutral != mutation.neutralEyes)
+            {
+                EyesNeutral = mutation.neutralEyes;
+            }
+            if (FaceNeutral != mutation.neutralFace)
+            {
+                FaceNeutral = mutation.neutralFace;
+            }
+        }
+        finally
+        {
+            _suppressNeutralPush = false;
+        }
+    }
+
     private sealed class RoutingSnapshot
     {
         public string Module { get; set; } = "";
@@ -258,6 +341,7 @@ public partial class TrackingDebugViewModel : ObservableRecipient
 
         RefreshRouting(now);
         RefreshSummaries();
+        SyncNeutralFromMutation();
 
         var eyeOwner = _libManager.LoadedModulesMetadata.FirstOrDefault(m => m.UsingEye)?.Name;
         var exprOwner = _libManager.LoadedModulesMetadata.FirstOrDefault(m => m.UsingExpression)?.Name;

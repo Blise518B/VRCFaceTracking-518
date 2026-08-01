@@ -120,6 +120,44 @@
                 </Grid>
             </Border>
 
+            <!-- Panic switches : red section. Hold the output at neutral while testing;
+                 raw data keeps flowing, so untoggling snaps straight back to live. -->
+            <Border Style="{StaticResource Cat518SectionBorderStyle}"
+                    Background="{StaticResource Cat518RedTint}"
+                    BorderBrush="{StaticResource Cat518RedEdge}">
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="1*"/>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+                    <StackPanel VerticalAlignment="Center">
+                        <TextBlock Text="Neutral override (testing safety net)"
+                                   FontWeight="SemiBold"
+                                   Foreground="{StaticResource Cat518Red}"/>
+                        <TextBlock Text="Hold eyes (open, centered) or face (resting) at neutral while you test. Modules keep running underneath - switching back is instant."
+                                   FontSize="11"
+                                   Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                   TextWrapping="Wrap"/>
+                    </StackPanel>
+                    <ToggleButton Grid.Column="1"
+                                  Margin="0,0,8,0"
+                                  MinWidth="150"
+                                  VerticalAlignment="Center"
+                                  IsChecked="{x:Bind ViewModel.EyesNeutral, Mode=TwoWay}"
+                                  ToolTipService.ToolTip="Send neutral eyes (open, looking straight ahead) instead of live eye tracking">
+                        <TextBlock Text="EYES: HOLD NEUTRAL" FontWeight="Bold"/>
+                    </ToggleButton>
+                    <ToggleButton Grid.Column="2"
+                                  MinWidth="150"
+                                  VerticalAlignment="Center"
+                                  IsChecked="{x:Bind ViewModel.FaceNeutral, Mode=TwoWay}"
+                                  ToolTipService.ToolTip="Send a resting face instead of live face-camera tracking">
+                        <TextBlock Text="FACE: HOLD NEUTRAL" FontWeight="Bold"/>
+                    </ToggleButton>
+                </Grid>
+            </Border>
+
             <!-- Routing header : green section -->
             <Border Style="{StaticResource Cat518SectionBorderStyle}"
                     Background="{StaticResource Cat518GreenTint}"
