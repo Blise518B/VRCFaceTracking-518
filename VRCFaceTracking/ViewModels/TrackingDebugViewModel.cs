@@ -91,11 +91,13 @@ public partial class TrackingDebugViewModel : ObservableRecipient
     // flowing; only the outgoing buffer is held at neutral, so untoggling is instant.
     [ObservableProperty] private bool _eyesNeutral;
     [ObservableProperty] private bool _faceNeutral;
+    [ObservableProperty] private bool _idleEyesEnabled = true;
     private bool _suppressNeutralPush;
     private Core.Params.Data.Mutation.NeutralOverride? _neutralMutation;
 
     partial void OnEyesNeutralChanged(bool value) => PushNeutral(m => m.neutralEyes = value);
     partial void OnFaceNeutralChanged(bool value) => PushNeutral(m => m.neutralFace = value);
+    partial void OnIdleEyesEnabledChanged(bool value) => PushNeutral(m => m.idleEyes = value);
 
     private void PushNeutral(Action<Core.Params.Data.Mutation.NeutralOverride> apply)
     {
@@ -162,6 +164,10 @@ public partial class TrackingDebugViewModel : ObservableRecipient
             if (FaceNeutral != mutation.neutralFace)
             {
                 FaceNeutral = mutation.neutralFace;
+            }
+            if (IdleEyesEnabled != mutation.idleEyes)
+            {
+                IdleEyesEnabled = mutation.idleEyes;
             }
         }
         finally

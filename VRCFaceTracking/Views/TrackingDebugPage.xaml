@@ -135,19 +135,23 @@
                         <TextBlock Text="Neutral override (testing safety net)"
                                    FontWeight="SemiBold"
                                    Foreground="{StaticResource Cat518Red}"/>
-                        <TextBlock Text="Hold eyes (open, centered) or face (resting) at neutral while you test. Modules keep running underneath - switching back is instant."
+                        <TextBlock Text="Hold eyes or face at neutral while you test. Modules keep running underneath - switching back is instant."
                                    FontSize="11"
                                    Foreground="{ThemeResource TextFillColorSecondaryBrush}"
                                    TextWrapping="Wrap"/>
                     </StackPanel>
-                    <ToggleButton Grid.Column="1"
-                                  Margin="0,0,8,0"
-                                  MinWidth="150"
-                                  VerticalAlignment="Center"
-                                  IsChecked="{x:Bind ViewModel.EyesNeutral, Mode=TwoWay}"
-                                  ToolTipService.ToolTip="Send neutral eyes (open, looking straight ahead) instead of live eye tracking">
-                        <TextBlock Text="EYES: HOLD NEUTRAL" FontWeight="Bold"/>
-                    </ToggleButton>
+                    <StackPanel Grid.Column="1" Margin="0,0,8,0" VerticalAlignment="Center">
+                        <ToggleButton MinWidth="150"
+                                      HorizontalAlignment="Stretch"
+                                      IsChecked="{x:Bind ViewModel.EyesNeutral, Mode=TwoWay}"
+                                      ToolTipService.ToolTip="Replace live eye tracking with held eyes - idling naturally or frozen straight ahead, per the checkbox below">
+                            <TextBlock Text="EYES: HOLD NEUTRAL" FontWeight="Bold"/>
+                        </ToggleButton>
+                        <CheckBox Content="glance around + blink"
+                                  FontSize="11" MinWidth="0" Margin="4,2,0,0"
+                                  IsChecked="{x:Bind ViewModel.IdleEyesEnabled, Mode=TwoWay}"
+                                  ToolTipService.ToolTip="While held: small natural glances and occasional blinks, like an idle avatar. Unchecked = frozen stare straight ahead."/>
+                    </StackPanel>
                     <ToggleButton Grid.Column="2"
                                   MinWidth="150"
                                   VerticalAlignment="Center"
