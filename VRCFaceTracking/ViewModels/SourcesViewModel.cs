@@ -107,6 +107,36 @@ public partial class SourcesViewModel : ObservableRecipient
         }
     }
 
+    /// <summary>
+    /// The manual override: tear everything down and run the start decisions again,
+    /// right now. Combined with setting a module to Always this recovers from any
+    /// state automatic switching got itself into - no app restart, no waiting for
+    /// the hot-swap watcher. Runs on the dispatcher for the same reason the
+    /// hot-swap service does: module metadata is a UI-bound collection.
+    /// </summary>
+    public void RestartTracking()
+    {
+        Summary = "Restarting tracking...";
+        var libManager = App.GetService<Core.Contracts.Services.ILibManager>();
+        _dispatcher?.TryEnqueue(() =>
+        {
+            try
+            {
+                libManager.TeardownAllAndResetAsync();
+                libManager.Initialize();
+            }
+            catch (Exception e)
+            {
+                Summary = $"Restart failed: {e.Message}";
+                return;
+            }
+
+            // Modules come up asynchronously; refresh once they have had a moment
+            ScheduleRefresh(2000);
+            ScheduleRefresh(6000);
+        });
+    }
+
     public void LaunchRow(SourceRow row)
     {
         var (started, message) = _companions.Launch(row.Name);

@@ -22,6 +22,7 @@
                         <ColumnDefinition Width="1*"/>
                         <ColumnDefinition Width="Auto"/>
                         <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="Auto"/>
                     </Grid.ColumnDefinitions>
                     <StackPanel VerticalAlignment="Center">
                         <TextBlock Text="Only start modules whose source is live"
@@ -38,11 +39,18 @@
                                    TextWrapping="Wrap"/>
                     </StackPanel>
                     <Button Grid.Column="1"
+                            Content="Restart tracking"
+                            Style="{StaticResource AccentButtonStyle}"
+                            Click="RestartTracking_OnClick"
+                            Margin="0,0,10,0"
+                            VerticalAlignment="Center"
+                            ToolTipService.ToolTip="Tear everything down and start modules again using the rules below - the manual override for when automatic switching got stuck. Set a module to Always first to force it regardless of detection."/>
+                    <Button Grid.Column="2"
                             Content="Re-scan"
                             Click="Rescan_OnClick"
                             Margin="0,0,10,0"
                             VerticalAlignment="Center"/>
-                    <ToggleSwitch Grid.Column="2"
+                    <ToggleSwitch Grid.Column="3"
                                   IsOn="{x:Bind ViewModel.GatingEnabled, Mode=TwoWay}"
                                   MinWidth="0"
                                   VerticalAlignment="Center"/>

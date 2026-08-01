@@ -134,7 +134,9 @@ public partial class ModuleActivationService : ObservableObject
     /// Filters module dll paths down to the ones that should actually be launched, logging
     /// the reason for every decision.
     /// </summary>
-    public List<string> FilterStartablePaths(IEnumerable<InstallableTrackingModule> modules, bool logDecisions = true)
+    /// <param name="forStart">See <see cref="TrackingSourceDetector.Decide"/>: true when the
+    /// result launches modules, false when it only names the set that should be running.</param>
+    public List<string> FilterStartablePaths(IEnumerable<InstallableTrackingModule> modules, bool logDecisions = true, bool forStart = true)
     {
         var allowed = new List<string>();
 
@@ -148,7 +150,7 @@ public partial class ModuleActivationService : ObservableObject
 
             var key = KeyFor(path, module.ModuleName);
             var (load, reason) = _detector.Decide(module.ModuleName, module.DllFileName, path,
-                                                  GetMode(key), GatingEnabled);
+                                                  GetMode(key), GatingEnabled, forStart);
 
             if (load)
             {

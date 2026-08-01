@@ -49,6 +49,19 @@ public class OpenVRService
         {
             return;
         }
+
+        // A dev build running from a bin folder must not claim the SteamVR auto-launch
+        // registration: every debug run re-registered the bin path, SteamVR then kept
+        // launching the STALE bin build instead of the installed app, and the installed
+        // app's own registration failed with InvalidManifest against the existing key.
+        // (Measured live: SteamVR resurrected a bin build days after it was built.)
+        if (currentDirectory.Contains($"{Path.DirectorySeparatorChar}bin{Path.DirectorySeparatorChar}", StringComparison.OrdinalIgnoreCase))
+        {
+            _logger.LogInformation(
+                "Running from a build folder - leaving the SteamVR auto-launch registration to the installed app.");
+            return;
+        }
+
         var manifestPath = Path.Combine(currentDirectory, "app.vrmanifest");
 
         var result = OpenVR.Applications.AddApplicationManifest(manifestPath, false);
@@ -104,8 +117,107 @@ public class OpenVRService
             Initialize();
         }
     }
-    
+
     public bool IsInitialized { get; private set; }
+
+    private System.Threading.Timer? _connectionWatch;
+    private long _lastReconnectAttempt;
+
+    /// <summary>
+    /// Keeps the OpenVR connection honest across SteamVR's own lifecycle. Two jobs:
+    ///
+    /// 1. While connected: drain the event queue. On VREvent_Quit (SteamVR shutting
+    ///    down), acknowledge and disconnect cleanly. Upstream ignored the event queue
+    ///    entirely, so SteamVR's shutdown escalated to force-killing the process -
+    ///    which the watchdog logged as a hard crash and relaunched, over and over,
+    ///    while a headset swap cycled SteamVR (measured live, 2026-08-01).
+    ///
+    /// 2. While disconnected: retry Initialize() whenever vrserver is running again.
+    ///    Without this, a process that survived a SteamVR restart kept a dead handle
+    ///    forever - GetHmdIdentity() returned null, the Pimax gate never opened, and
+    ///    the hands-free headset swap silently stopped working.
+    /// </summary>
+    public void StartConnectionWatch()
+    {
+        _connectionWatch ??= new System.Threading.Timer(_ => WatchConnection(), null,
+            TimeSpan.FromSeconds(3), TimeSpan.FromSeconds(3));
+    }
+
+    private void WatchConnection()
+    {
+        try
+        {
+            if (IsInitialized)
+            {
+                PumpEvents();
+                return;
+            }
+
+            // Reconnect only when SteamVR is actually up, and not more than once per
+            // 15s - OpenVR.Init against a starting SteamVR is slow and logs noise.
+            if (Environment.TickCount64 - _lastReconnectAttempt < 15000)
+            {
+                return;
+            }
+
+            if (System.Diagnostics.Process.GetProcessesByName("vrserver").Length == 0)
+            {
+                return;
+            }
+
+            _lastReconnectAttempt = Environment.TickCount64;
+            _logger.LogInformation("SteamVR is running again - reconnecting OpenVR...");
+            Initialize();
+        }
+        catch (Exception e)
+        {
+            _logger.LogDebug("OpenVR connection watch: {message}", e.Message);
+        }
+    }
+
+    private void PumpEvents()
+    {
+        try
+        {
+            var ev = new VREvent_t();
+            var size = (uint)System.Runtime.InteropServices.Marshal.SizeOf<VREvent_t>();
+            while (_system != null && _system.PollNextEvent(ref ev, size))
+            {
+                if ((EVREventType)ev.eventType != EVREventType.VREvent_Quit)
+                {
+                    continue;
+                }
+
+                _logger.LogInformation(
+                    "SteamVR is shutting down - acknowledging and disconnecting cleanly. "
+                    + "The app stays up and reconnects when SteamVR returns.");
+
+                // Tell SteamVR we heard it, so it doesn't escalate to killing us.
+                try { _system.AcknowledgeQuit_Exiting(); } catch (Exception) { }
+                Disconnect();
+                return;
+            }
+        }
+        catch (Exception)
+        {
+            // A dead runtime mid-poll means SteamVR is gone; treat it as a disconnect
+            Disconnect();
+        }
+    }
+
+    private void Disconnect()
+    {
+        IsInitialized = false;
+        _system = null;
+        try
+        {
+            OpenVR.Shutdown();
+        }
+        catch (Exception)
+        {
+            // Already gone - the goal (no live handle) is met either way
+        }
+    }
 
     /// <summary>
     /// Identity of the active SteamVR headset ("Manufacturer Model TrackingSystem",

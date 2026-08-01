@@ -20,4 +20,6 @@ public sealed partial class SourcesPage : Page
         ViewModel.Modules.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
 
     private void Rescan_OnClick(object sender, RoutedEventArgs e) => ViewModel.Refresh();
+
+    private void RestartTracking_OnClick(object sender, RoutedEventArgs e) => ViewModel.RestartTracking();
 }

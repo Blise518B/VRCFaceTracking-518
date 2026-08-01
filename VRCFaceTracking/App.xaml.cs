@@ -214,10 +214,32 @@ public partial class App : Application
             CrashReporter?.ReportException(e.ExceptionObject as Exception, "AppDomain.UnhandledException");
         TaskScheduler.UnobservedTaskException += (_, e) =>
         {
+            e.SetObserved();
+
+            // Aborted socket receives are routine teardown, not crashes: swapping
+            // headsets cycles network interfaces and VR runtimes, every pending
+            // ReceiveAsync dies with "I/O operation aborted" (error 995), and one
+            // evening of headset switching wrote seven scary "crash" reports that
+            // all said exactly this. Log and move on; report everything else.
+            var benign = e.Exception.Flatten().InnerExceptions.Count > 0
+                && e.Exception.Flatten().InnerExceptions.All(ex =>
+                    ex is System.Net.Sockets.SocketException
+                        {
+                            SocketErrorCode: System.Net.Sockets.SocketError.OperationAborted
+                                          or System.Net.Sockets.SocketError.Interrupted
+                        }
+                        or ObjectDisposedException
+                        or OperationCanceledException);
+            if (benign)
+            {
+                _logger?.LogDebug("Ignored an abandoned socket task from connection teardown: {message}",
+                    e.Exception.InnerException?.Message);
+                return;
+            }
+
             // Not fatal: we observe it and keep running, so it must not be recorded as this
             // session's explanation - a later hard crash still needs to be reported.
             CrashReporter?.ReportException(e.Exception, "TaskScheduler.UnobservedTaskException", fatal: false);
-            e.SetObserved();
         };
 
         // Kill any other instances of VRCFaceTracking.exe and our module processes.
@@ -240,6 +262,11 @@ public partial class App : Application
         // anything marked "launch with VRCFT". The Dream Air stack is gated on
         // SteamVR's active headset actually being a Pimax; while the headset is
         // still unknown the pass defers and the hot-swap watcher retries later.
+        // Survive SteamVR restarts: drain its event queue while connected (a Quit
+        // event means disconnect cleanly instead of being force-killed) and reconnect
+        // once vrserver is back, so the headset identity below keeps resolving.
+        GetService<OpenVRService>().StartConnectionWatch();
+
         CompanionAppService.HmdResolver = () =>
         {
             try

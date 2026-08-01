@@ -69,8 +69,10 @@ public class ModuleHotSwapService : IDisposable
 
             var installed = _moduleDataService.GetInstalledModules()
                 .Concat(_moduleDataService.GetLegacyModules());
+            // forStart:false - this set only says which modules BELONG here, so a
+            // running module whose own stream listener hides its evidence still counts.
             var current = string.Join("|",
-                _activation.FilterStartablePaths(installed, logDecisions: false).OrderBy(p => p));
+                _activation.FilterStartablePaths(installed, logDecisions: false, forStart: false).OrderBy(p => p));
 
             // First observation after startup: assume it matches what the
             // normal init already started, and just watch for changes.

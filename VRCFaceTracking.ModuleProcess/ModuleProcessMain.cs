@@ -224,6 +224,14 @@ public class ModuleProcessMain
                     {
                         var pkt = (EventInitPacket) packet;
 
+                        // The host sends nothing while Initialize() runs, and some modules
+                        // legitimately block in it far longer than the connection timeout
+                        // (iFacialMocap waits 120s for a phone; Vive runtimes are slow).
+                        // With the timer armed, the timeout fired MID-INITIALIZE and shot
+                        // the process - which the supervisor read as a crash and restarted,
+                        // forever. Disarm while the module initializes; re-arm right after.
+                        _connectionTimer?.Change(Timeout.InfiniteTimeSpan, Timeout.InfiniteTimeSpan);
+
                         bool eyeSuccess, expressionSuccess;
                         try
                         {
@@ -237,6 +245,10 @@ public class ModuleProcessMain
                         {
                             Logger.LogError("Exception initializing {module}. Skipping. {e}", DefModuleAssembly.GetType().Name, e);
                             return;
+                        }
+                        finally
+                        {
+                            _connectionTimer?.Change(TimeSpan.FromSeconds(CONNECTION_TIMEOUT), Timeout.InfiniteTimeSpan);
                         }
                         
                         DefModuleAssembly._updateCts = new CancellationTokenSource();

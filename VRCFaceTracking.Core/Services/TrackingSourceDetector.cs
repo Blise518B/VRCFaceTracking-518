@@ -2,6 +2,7 @@
 using System.IO.MemoryMappedFiles;
 using System.Net;
 using System.Net.Sockets;
+using System.Runtime.InteropServices;
 using Microsoft.Extensions.Logging;
 
 namespace VRCFaceTracking.Core.Services;
@@ -166,8 +167,16 @@ public class TrackingSourceDetector
         },
         new()
         {
+            // "etvr" is in this list ON PURPOSE: the merged DreamAir eye module ships
+            // under the stock dll/manifest name "ETVRTrackingModule" / "ETVR Tracking
+            // Module", so nothing in its identity says BrokenEye or Dream Air. Without
+            // this mapping the module was gated ONLY on the EyeTrackVR app - and on a
+            // Babble-for-expressions setup that app never runs, so a Pimax day ended
+            // with BrokenEye streaming Tobii frames and "no module loaded" (measured
+            // live, 2026-08-01). BrokenEye is niche enough that an etvr-named module
+            // starting when it streams is exactly what every BrokenEye user wants.
             Name = BrokenEyeSourceName,
-            ModuleKeywords = new[] { "brokeneye", "dreamair", "dream air" },
+            ModuleKeywords = new[] { "brokeneye", "dreamair", "dream air", "etvr" },
             // NOT process-based: BrokenEye auto-launches with VRCFT, so on a
             // Quest Pro day the process runs while the Dream Air sits on the
             // desk - and a process-detected BrokenEye would start the DreamAir
@@ -237,7 +246,7 @@ public class TrackingSourceDetector
             }
         }
 
-        var results = Sweep();
+        var results = Sweep(force);
 
         lock (_cacheLock)
         {
@@ -288,7 +297,7 @@ public class TrackingSourceDetector
         return cached ?? new List<TrackingSourceStatus>();
     }
 
-    private List<TrackingSourceStatus> Sweep()
+    private List<TrackingSourceStatus> Sweep(bool force = false)
     {
         {
             var runningProcesses = SafeProcessNames();
@@ -298,6 +307,7 @@ public class TrackingSourceDetector
             foreach (var source in KnownSources)
             {
                 var evidence = new List<string>();
+                var selfSustainOnly = false;
 
                 if (!source.NeverAutoDetect)
                 {
@@ -340,17 +350,25 @@ public class TrackingSourceDetector
 
                     foreach (var port in source.UdpStreamPorts)
                     {
-                        var (bindable, dataWaiting) = ProbeUdpStreamCached(port);
+                        var (bindable, dataWaiting) = ProbeUdpStreamCached(port, force);
                         if (!bindable)
                         {
-                            // Someone already listens there, which in practice is this
-                            // module's own sandbox process: it's running, so report the
-                            // source as live rather than pulling the rug out from under it.
-                            evidence.Add($"UDP {port} in use (the module is already listening)");
+                            // A held port only means something when WE hold it: our own
+                            // module process listening there proves the module runs, so
+                            // don't pull the rug out from under it. Held by any other
+                            // process, the port says nothing about a phone streaming -
+                            // and treating it as evidence once created a start->can't
+                            // bind->die->restart loop feeding on its own listener.
+                            if (UdpPortOwnedByOurModuleProcess(port))
+                            {
+                                evidence.Add($"UDP {port} in use (the module is already listening)");
+                                selfSustainOnly = evidence.Count == 1;
+                            }
                         }
                         else if (dataWaiting)
                         {
                             evidence.Add($"data arriving on UDP {port}");
+                            selfSustainOnly = false;
                         }
                     }
                 }
@@ -360,6 +378,7 @@ public class TrackingSourceDetector
                     Name = source.Name,
                     Detected = evidence.Count > 0,
                     Strong = evidence.Count > 0 && !source.GenericRuntime,
+                    SelfSustainOnly = selfSustainOnly,
                     Evidence = evidence.Count > 0
                         ? string.Join(", ", evidence) + (source.GenericRuntime ? " (generic VR runtime)" : string.Empty)
                         : source.NeverAutoDetect ? "never auto-detected by design" : "not running",
@@ -389,8 +408,17 @@ public class TrackingSourceDetector
     /// Should this module be started? Returns a human-readable reason either way, which the
     /// UI shows and the log records - a silent skip would be indistinguishable from a bug.
     /// </summary>
+    /// <param name="forStart">
+    /// True when the answer will be used to START a module (initial load, hot-plug,
+    /// post-death restart): self-sustain-only evidence is ignored, because a fresh
+    /// module can't use a port our previous instance holds. False when the answer only
+    /// decides whether an already-running module still belongs (the hot-swap set):
+    /// there, self-sustain evidence must count or a live module gets torn down purely
+    /// because its own listener hides the stream from the probe.
+    /// </param>
     public (bool Load, string Reason) Decide(string? moduleName, string? dllName, string? path,
-                                             ModuleStartMode mode, bool gatingEnabled)
+                                             ModuleStartMode mode, bool gatingEnabled,
+                                             bool forStart = true)
     {
         if (mode == ModuleStartMode.Never)
         {
@@ -416,7 +444,7 @@ public class TrackingSourceDetector
         var statuses = Scan();
         var live = matches
             .Select(m => statuses.FirstOrDefault(s => s.Name == m.Name))
-            .Where(s => s is { Detected: true })
+            .Where(s => s is { Detected: true } && !(forStart && s.SelfSustainOnly))
             .Select(s => s!)
             .ToList();
 
@@ -507,14 +535,21 @@ public class TrackingSourceDetector
     // Cached like the other live-data probes so at most one sweep per lifetime pays it.
     private static readonly Dictionary<int, (long At, bool Bindable, bool DataWaiting)> UdpProbeCache = new();
 
-    private static (bool Bindable, bool DataWaiting) ProbeUdpStreamCached(int port)
+    private static (bool Bindable, bool DataWaiting) ProbeUdpStreamCached(int port, bool force = false)
     {
-        lock (ProbeCacheLock)
+        // A forced scan means the caller needs the truth RIGHT NOW - the canonical case
+        // is the just-died-module re-check, where the port was freed milliseconds ago
+        // and a <=5s-old "in use" verdict is precisely the wrong answer (it restarted a
+        // dead module into an infinite start->die loop, measured live 2026-08-01).
+        if (!force)
         {
-            if (UdpProbeCache.TryGetValue(port, out var hit) &&
-                Environment.TickCount64 - hit.At < ProbeCacheMs)
+            lock (ProbeCacheLock)
             {
-                return (hit.Bindable, hit.DataWaiting);
+                if (UdpProbeCache.TryGetValue(port, out var hit) &&
+                    Environment.TickCount64 - hit.At < ProbeCacheMs)
+                {
+                    return (hit.Bindable, hit.DataWaiting);
+                }
             }
         }
 
@@ -679,6 +714,86 @@ public class TrackingSourceDetector
         }
     }
 
+    // ------------------------------------------------ UDP port owner resolution
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct MIB_UDPROW_OWNER_PID
+    {
+        public uint LocalAddr;
+        public uint LocalPort; // network byte order in the low 16 bits
+        public uint OwningPid;
+    }
+
+    [DllImport("iphlpapi.dll", SetLastError = true)]
+    private static extern uint GetExtendedUdpTable(IntPtr pUdpTable, ref int pdwSize,
+        bool sort, int ipVersion, int tableClass, uint reserved);
+
+    private const int AF_INET = 2;
+    private const int UDP_TABLE_OWNER_PID = 1;
+
+    /// <summary>
+    /// True when the process listening on <paramref name="port"/> is one of our own
+    /// sandbox module processes. That distinction decides whether a busy port is
+    /// evidence ("our module is running") or noise ("someone else owns that port").
+    /// Conservative on failure: unknown owner counts as not-ours.
+    /// </summary>
+    private static bool UdpPortOwnedByOurModuleProcess(int port)
+    {
+        try
+        {
+            var size = 0;
+            GetExtendedUdpTable(IntPtr.Zero, ref size, false, AF_INET, UDP_TABLE_OWNER_PID, 0);
+            if (size <= 0)
+            {
+                return false;
+            }
+
+            var table = Marshal.AllocHGlobal(size);
+            try
+            {
+                if (GetExtendedUdpTable(table, ref size, false, AF_INET, UDP_TABLE_OWNER_PID, 0) != 0)
+                {
+                    return false;
+                }
+
+                var rowCount = Marshal.ReadInt32(table);
+                var rowPtr = table + sizeof(int);
+                var rowSize = Marshal.SizeOf<MIB_UDPROW_OWNER_PID>();
+
+                for (var i = 0; i < rowCount; i++)
+                {
+                    var row = Marshal.PtrToStructure<MIB_UDPROW_OWNER_PID>(rowPtr + i * rowSize);
+                    var rowPort = (ushort)System.Net.IPAddress.NetworkToHostOrder((short)(row.LocalPort & 0xFFFF));
+                    if (rowPort != port)
+                    {
+                        continue;
+                    }
+
+                    try
+                    {
+                        using var owner = Process.GetProcessById((int)row.OwningPid);
+                        return owner.ProcessName.StartsWith("VRCFaceTracking.ModuleProcess",
+                            StringComparison.OrdinalIgnoreCase);
+                    }
+                    catch (Exception)
+                    {
+                        return false; // owner already gone or inaccessible
+                    }
+                }
+            }
+            finally
+            {
+                Marshal.FreeHGlobal(table);
+            }
+        }
+        catch (Exception)
+        {
+            // Interop unavailable - err on "not ours" so a foreign port never fakes a source
+        }
+
+        return false;
+    }
+
     private static bool MemoryMappedFileExists(string name)
     {
         if (!OperatingSystem.IsWindows())
@@ -716,6 +831,14 @@ public sealed class TrackingSourceStatus
 
     /// <summary>Detected, but only by a shared VR runtime that any headset would start.</summary>
     public bool WeakOnly => Detected && !Strong;
+
+    /// <summary>
+    /// The only evidence is our own already-running module (its listener on the stream
+    /// port). Good enough to KEEP that module alive - it may be mid-stream and its
+    /// traffic is invisible from outside - but never a reason to START one: a fresh
+    /// module can neither bind the port nor receive anything through it.
+    /// </summary>
+    public bool SelfSustainOnly { get; init; }
 }
 
 /// <summary>How a module participates in source-based auto-start.</summary>
