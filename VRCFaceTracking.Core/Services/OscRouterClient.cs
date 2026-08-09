@@ -17,7 +17,7 @@ namespace VRCFaceTracking.Core.Services;
 /// the fixed well-known router address, and feeds received datagrams into the exact
 /// same parse path native reception uses.
 ///
-/// Zero configuration by design: the only constant is 127.0.0.1:51518 from the
+/// Zero configuration by design: the only constant is 127.0.0.1:18518 from the
 /// standard. If no router is running, this stays silent and costs one tiny keep-alive
 /// packet every 20 seconds; native OSCQuery keeps working unaffected either way.
 /// Duplicates (native + router both delivering) are harmless: avatar parameters are
@@ -25,7 +25,10 @@ namespace VRCFaceTracking.Core.Services;
 /// </summary>
 public partial class OscRouterClient : ObservableObject
 {
-    private const int RouterPort = 51518;
+    // Moved from 51518 on 2026-08-08: that port sits in Windows' dynamic range
+    // (49152+), where Hyper-V/WSL reserve random blocks at every boot, which
+    // intermittently stopped the hub binding it. Must stay below 49152.
+    private const int RouterPort = 18518;
     private static readonly IPEndPoint RouterEndpoint = new(IPAddress.Loopback, RouterPort);
     private static readonly TimeSpan KeepAliveInterval = TimeSpan.FromSeconds(20);
     private static readonly byte[] ControlPrefix = "/router518/"u8.ToArray();
