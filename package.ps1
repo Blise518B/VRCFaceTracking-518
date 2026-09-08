@@ -43,7 +43,12 @@ if (Test-Path $zip) { Remove-Item $zip -Force }
 New-Item -ItemType Directory $dst -Force | Out-Null
 
 Write-Host "Copying build..."
-Copy-Item "$src\*" $dst -Recurse -Exclude *.pdb
+# Exclude build-only artifacts, not just symbols. The .appxrecipe in particular is
+# MSBuild's packaging manifest: it is useless at runtime and embeds the building
+# machine's Windows username and full NuGet cache paths, which would then ship to
+# everyone who downloads a release.
+$excluded = @("*.pdb", "*.appxrecipe", "*.buildschema.json", "*.pri.xml", "resources.pri.StaticAnalysis.log")
+Copy-Item "$src\*" $dst -Recurse -Exclude $excluded
 
 @"
 VRCFaceTracking - 518 Edition
@@ -103,6 +108,19 @@ sits alongside a normal install rather than replacing it.
 Not code-signed, not affiliated with the upstream project - report problems here,
 not to the VRCFaceTracking developers.
 "@ | Set-Content (Join-Path $dst "README.txt") -Encoding utf8
+
+# Fail loudly rather than shipping a build that carries the author's identity.
+$leaks = Get-ChildItem $dst -Recurse -File | Where-Object {
+    $_.Extension -notin @(".dll",".exe",".winmd",".so",".dylib",".pri",".xbf",".png",".jpg",".ico")
+} | Where-Object {
+    (Select-String -Path $_.FullName -Pattern ([regex]::Escape($env:USERNAME)) -SimpleMatch -Quiet -ErrorAction SilentlyContinue)
+}
+if ($leaks) {
+    Write-Host "Refusing to package: these staged files contain this machine's username:" -ForegroundColor Red
+    $leaks | ForEach-Object { Write-Host ("  " + $_.FullName.Substring($dst.Length + 1)) -ForegroundColor Red }
+    Write-Host "Add them to the exclusion list in package.ps1." -ForegroundColor Red
+    exit 1
+}
 
 Write-Host "Zipping (takes a moment)..."
 Add-Type -AssemblyName System.IO.Compression.FileSystem

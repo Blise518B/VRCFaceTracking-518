@@ -13,13 +13,20 @@
     <!-- THIS FORK'S RELEASE NUMBER - the only line to change when cutting a release.
          It names the .exe and .zip that package.ps1 produces, shows on the Settings
          page, goes into every crash report, and is logged at startup. -->
-    <Fork518Version>1.0.0</Fork518Version>
+    <Fork518Version>1.1.0</Fork518Version>
 
     <Version>$(Fork518Version)</Version>
     <FileVersion>$(Fork518Version).0</FileVersion>
     <InformationalVersion>$(Fork518Version)</InformationalVersion>
     <Product>VRCFaceTracking 518 Edition</Product>
     <Company>Blise518B</Company>
+
+    <!-- Keep the author's folder layout out of shipped binaries. Without this the
+         compiler embeds absolute source and .pdb paths (C:\DIY-Projects\...) in every
+         assembly, which then travels to anyone who downloads a release. PathMap
+         rewrites them to a neutral root; PDBs still work locally. -->
+    <PathMap>$(MSBuildThisFileDirectory)=./</PathMap>
+    <EmbedUntrackedSources>false</EmbedUntrackedSources>
 
     <LangVersion>latest</LangVersion>
     <ImplicitUsings>enable</ImplicitUsings>

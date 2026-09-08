@@ -17,6 +17,44 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ---
 
+## [1.1.0] - 2026-08-01
+Based on upstream VRCFaceTracking 5.4.5.
+
+### Added
+- **Neutral Override — panic switches for testing.** Two toggles on the Tracking Debug
+  page (and on Tracking Mutations): hold the eyes and/or the face at a calm neutral pose
+  while modules keep running underneath. Only the outgoing buffer is overridden, so the
+  raw column on the debug page still shows live hardware and switching back is instant.
+  Always active and state is persisted, so it can never silently do nothing.
+- **Idle animation for held eyes.** Rather than a frozen stare, held eyes glance around
+  and blink like an idle avatar: centre-biased fixations of 0.5–3 s, 100–180 ms
+  smoothstepped saccades, a whisper of drift, and blinks every few seconds (occasionally
+  a double). A checkbox switches back to the static pose.
+- **Companion apps are discovered instead of hardcoded.** A running instance's own path
+  is used when available, otherwise a bounded search of the usual folders; whatever is
+  found is remembered. Unconfigured rows now show a **Set path…** button that opens the
+  file picker directly.
+- **Restart tracking** button on the Sources page — the manual override that tears
+  everything down and re-runs the start decisions immediately.
+
+### Fixed
+- **Headset swaps could end with no tracking at all.** Five causes fixed together:
+  the merged Dream Air eye module wasn't mapped to the BrokenEye source (it ships
+  under the stock ETVR name); a stale probe cache restarted a dead iFacialMocap
+  module forever; the module process's 60 s connection timeout shot modules that
+  legitimately take longer to initialize; a busy stream port counted as source
+  evidence no matter who owned it; and SteamVR's shutdown/restart cycle was ignored,
+  so the app got force-killed on SteamVR exit and kept a dead OpenVR handle after
+  SteamVR restarts. A **Restart tracking** button on the Sources page is the manual
+  override for anything automatic switching ever gets wrong.
+- **Companion-app discovery could pick the wrong program** (it matched
+  "EyeTrackVR Firmware Flashing Tool"), and a startup race could leave a module unstarted
+  until the supervisor's next sweep.
+- **Abandoned socket receives during headset swaps** were written up as crash reports;
+  they are now logged as the routine teardown they are.
+- Dev builds run from a `bin` folder no longer claim the SteamVR auto-launch
+  registration, which is how SteamVR kept resurrecting stale builds.
+
 ## [1.0.0] - 2026-07-31
 Based on upstream VRCFaceTracking 5.4.5.
 
@@ -47,15 +85,6 @@ privately; it is listed here so the starting point is on the record.
   cadence, and a stall watchdog that logs where the time went.
 
 ### Fixed
-- **Headset swaps could end with no tracking at all.** Five causes fixed together:
-  the merged Dream Air eye module wasn't mapped to the BrokenEye source (it ships
-  under the stock ETVR name); a stale probe cache restarted a dead iFacialMocap
-  module forever; the module process's 60 s connection timeout shot modules that
-  legitimately take longer to initialize; a busy stream port counted as source
-  evidence no matter who owned it; and SteamVR's shutdown/restart cycle was ignored,
-  so the app got force-killed on SteamVR exit and kept a dead OpenVR handle after
-  SteamVR restarts. A **Restart tracking** button on the Sources page is the manual
-  override for anything automatic switching ever gets wrong.
 - **Tracking froze for ~0.5 s every few seconds.** Curve-profile auto-switching ran a
   blocking tracking-source scan (~430 ms measured) on the 100 Hz tracking thread every
   time its 5 s cache expired.
@@ -80,4 +109,5 @@ privately; it is listed here so the starting point is on the record.
   upstream release it is based on, so a report from this build is never mistaken for one
   against stock VRCFaceTracking.
 
+[1.1.0]: https://github.com/Blise518B/VRCFaceTracking-518/releases/tag/518-v1.1.0
 [1.0.0]: https://github.com/Blise518B/VRCFaceTracking-518/releases/tag/518-v1.0.0
