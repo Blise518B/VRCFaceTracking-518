@@ -17,6 +17,20 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ---
 
+## [Unreleased]
+
+### Fixed
+- **Starting iFacialMocap mid-session restarted tracking three times.** Bringing the
+  phone up while VRCFT was already running (desktop mode) got its module started within
+  ten seconds, then torn down and started twice more, with two tracking blackouts in
+  between, before it settled about a minute later. Two causes: the hot-swap check
+  compared the new module set against the last set it had *applied* rather than what was
+  actually *running*, so a module the hot-plug check had just started counted as a change
+  worth a full re-initialize; and that re-initialize read a stale probe cache that still
+  said "port in use" from our own just-killed listener, so the phone looked absent until
+  the next hot-plug tick. The hot-swap check now adopts the set when the matching modules
+  already run, and every re-initialize looks at the hardware fresh after tearing down.
+
 ## [1.1.0] - 2026-08-01
 Based on upstream VRCFaceTracking 5.4.5.
 

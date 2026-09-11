@@ -267,14 +267,7 @@ public class UnifiedLibManager : ILibManager
             return;
         }
 
-        List<string> runningPaths;
-        lock ( AvailableSandboxModules )
-        {
-            runningPaths = AvailableSandboxModules
-                .Where(m => m.Process is { HasExited: false })
-                .Select(m => m.SandboxModulePath ?? string.Empty)
-                .ToList();
-        }
+        var runningPaths = GetRunningModulePaths();
 
         foreach ( var decision in _moduleActivationService.Evaluate(modules).Where(d => d.WillStart) )
         {
@@ -304,6 +297,18 @@ public class UnifiedLibManager : ILibManager
 
             _logger.LogInformation("{module}: {reason}. Starting it now.", decision.DisplayName, decision.Reason);
             InitialiseSandboxesBaseOnPaths(new[] { path });
+        }
+    }
+
+    /// <inheritdoc/>
+    public IReadOnlyList<string> GetRunningModulePaths()
+    {
+        lock ( AvailableSandboxModules )
+        {
+            return AvailableSandboxModules
+                .Where(m => m.Process is { HasExited: false } && !string.IsNullOrEmpty(m.SandboxModulePath))
+                .Select(m => m.SandboxModulePath)
+                .ToList();
         }
     }
 
@@ -521,6 +526,13 @@ public class UnifiedLibManager : ILibManager
     {
         // Kill lingering threads
         TeardownAllAndResetAsync();
+
+        // That teardown just freed every port our module processes held, but the detector's
+        // sweep cache (up to 5 s old) still says "UDP 49983 in use". With no module of ours
+        // owning the port any more, that stale verdict reads as "not detected" - so a phone
+        // streaming right now was skipped here and only picked up by the next hot-plug tick,
+        // ten seconds of no tracking later (measured live 2026-09-11). Look again, fresh.
+        _moduleActivationService.Detector.Scan(force: true);
 
         // Find all modules, then start only the ones whose tracking source is actually
         // live. Without this every installed module spawns a process and races to claim
