@@ -71,8 +71,8 @@ public class ModuleHotSwapService : IDisposable
                 .Concat(_moduleDataService.GetLegacyModules());
             // forStart:false - this set only says which modules BELONG here, so a
             // running module whose own stream listener hides its evidence still counts.
-            var current = string.Join("|",
-                _activation.FilterStartablePaths(installed, logDecisions: false, forStart: false).OrderBy(p => p));
+            var startable = _activation.FilterStartablePaths(installed, logDecisions: false, forStart: false);
+            var current = string.Join("|", startable.OrderBy(p => p));
 
             // First observation after startup: assume it matches what the
             // normal init already started, and just watch for changes.
@@ -95,6 +95,22 @@ public class ModuleHotSwapService : IDisposable
             if (current.Length == 0)
             {
                 _pendingSet = null;
+                return;
+            }
+
+            // A source that APPEARED is already handled incrementally: the lib manager's
+            // hot-plug check starts just that module about ten seconds after its stream
+            // shows up. If everything that should be running is running, a full
+            // re-initialize has nothing to fix - and doing one anyway killed the module
+            // that had just started, after which re-init missed the phone behind a stale
+            // probe cache, and tracking thrashed through three starts and two blackouts
+            // before settling (measured live 2026-09-11). Adopt the set and move on.
+            if (SameSet(startable, _libManager.GetRunningModulePaths()))
+            {
+                _appliedSet = current;
+                _pendingSet = null;
+                _logger?.LogInformation(
+                    "Tracking sources changed, but the matching modules are already running - nothing to re-initialize.");
                 return;
             }
 
@@ -163,6 +179,11 @@ public class ModuleHotSwapService : IDisposable
         _logger?.LogInformation("Active headset changed: {old} -> {new}", previous ?? "none", hmd);
         _companions.LaunchConfiguredAtStartup();
     }
+
+    /// <summary>Order- and case-insensitive equality of two path sets.</summary>
+    private static bool SameSet(IEnumerable<string> a, IEnumerable<string> b) =>
+        new HashSet<string>(a, StringComparer.OrdinalIgnoreCase)
+            .SetEquals(new HashSet<string>(b, StringComparer.OrdinalIgnoreCase));
 
     public void Dispose() => _timer?.Dispose();
 }
