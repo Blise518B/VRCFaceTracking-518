@@ -32,6 +32,15 @@ These are load-bearing. Breaking one produces a symptom that looks like
 6. **`ReplyUpdatePacket`'s wire layout is shared by two processes.** Layout is
    `[4B magic][4B type][4B size][16 header floats][EXPRESSION_COUNT floats]`.
    Both sides ship together, but changing the order breaks tracking silently.
+7. **No unbounded UI over data that lives all session.** Every live XAML object is
+   visited by every garbage collection, and those collections pause the send loop
+   too. The Output page once held 5,163 log lines with six behaviours each and made
+   every GC a 90 ms - 1.4 s tracking freeze. Cap what a page shows, virtualize the
+   list, and detach from static collections on `Unloaded` (a bound `ItemsSource` on a
+   static collection keeps the whole page alive).
+8. **A module process must never be left without an update pump.** It kills itself
+   after 60 s of silence and the supervisor reads that as a crash. A module that
+   initializes nothing goes on standby (`UnifiedLibManager.PutOnStandby`).
 
 ---
 

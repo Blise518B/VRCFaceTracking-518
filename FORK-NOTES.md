@@ -24,6 +24,15 @@ A background supervisor thread polls every 2 seconds for sandbox module processe
 
 Intentional teardowns (re-initialize, app shutdown) never trigger restarts.
 
+A module that initializes **no** tracking slot - because another module already provides
+everything it can do - is not left running either: without an update pump its process
+would kill itself after 60 s and look like a crash. It is shut down and put on **standby**
+instead, shown greyed out on the Modules page with the module holding the slots. The
+supervisor's hot-plug tick starts it again once a slot it can fill frees up (its holder
+died or went dormant). A slot it was offered and declined does not count, so a module
+configured for face only never cycles on a free eye slot. Any full re-initialize clears
+standby.
+
 ## 2. App crash watchdog
 
 `VRCFaceTracking.Watchdog/` + wiring in `VRCFaceTracking/App.xaml.cs`

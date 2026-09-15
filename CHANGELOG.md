@@ -30,6 +30,33 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   said "port in use" from our own just-killed listener, so the phone looked absent until
   the next hot-plug tick. The hot-swap check now adopts the set when the matching modules
   already run, and every re-initialize looks at the hardware fresh after tearing down.
+- **Tracking froze for up to 1.4 s at a time after a few hours.** The "[PerfWatch] Send
+  loop stalled" warnings were garbage-collection pauses. The Output page rendered every
+  log line it had ever received, each carrying six trigger behaviours, and the log never
+  shrank: after seven hours that was 5,163 rendered lines and about 220,000 objects that
+  every collection had to visit, so each one paused tracking for 90 ms to 1.4 s. The page
+  now shows the newest 2,000 lines in a virtualized list with no behaviours, the full
+  buffer stops at 10,000 lines (`latest.log` still keeps everything), and the page lets go
+  of the log when you navigate away. Copy and Save no longer rebuild the text once per line.
+- **A module that got no tracking slot "crashed" once a minute, all session.** With
+  Virtual Desktop providing eyes and face, Project Babble was started, offered nothing,
+  and left running without an update pump. Its process heard nothing for 60 s, assumed
+  the app was gone and killed itself; the supervisor wrote a crash report and restarted
+  it into the same situation - 586 times in one day. Such a module now goes on standby:
+  its process is shut down, the Modules page says which module holds the slots, and it
+  starts again by itself once a slot it can fill frees up.
+- **A module coming up with eyes only marked the face slot free while another module
+  owned it.** The next module to start would have been offered a slot that was taken.
+  Slots are now only claimed at init, and only released when their owner goes away.
+- **Crash (access violation) with the VRChat Output page open.** A send-on-load parameter
+  can be queued before its first value is written, and its native value memory was never
+  initialized, so reading it followed a garbage string pointer. New messages now start
+  with a valid empty value, and the Output tap reads numbers without touching the string.
+- **Log flooded with "mDNS send ... failed (AddressNotAvailable)".** The mDNS responder
+  kept one sender per address found at startup and used it forever. When an adapter lost
+  its address, every query failed on it, about eight times a second - 81% of one
+  session's log. A sender whose address is gone is now retired, and the senders follow
+  network changes in both directions.
 
 ## [1.1.0] - 2026-08-01
 Based on upstream VRCFaceTracking 5.4.5.
