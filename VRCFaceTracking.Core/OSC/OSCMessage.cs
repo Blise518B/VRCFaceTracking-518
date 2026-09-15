@@ -39,6 +39,34 @@ public class OscMessage
         set => _valueSetter(value);
     }
 
+    private static readonly int TypeOffset = Marshal.OffsetOf<OscValue>(nameof(OscValue.Type)).ToInt32();
+    private static readonly int IntOffset = Marshal.OffsetOf<OscValue>(nameof(OscValue.IntValue)).ToInt32();
+    private static readonly int FloatOffset = Marshal.OffsetOf<OscValue>(nameof(OscValue.FloatValue)).ToInt32();
+    private static readonly int BoolOffset = Marshal.OffsetOf<OscValue>(nameof(OscValue.BoolValue)).ToInt32();
+
+    /// <summary>
+    /// The first value as an int, float or bool, read straight out of native memory.
+    /// Unlike <see cref="Value"/> this never marshals the string field - a pointer it would
+    /// have to follow - and allocates nothing beyond the box. For diagnostics that sample
+    /// every outgoing message, such as the VRChat Output page. Null for anything else.
+    /// </summary>
+    public object? PeekScalar()
+    {
+        var ptr = _meta.Value;
+        if (_meta.ValueLength == 0 || ptr == IntPtr.Zero)
+        {
+            return null;
+        }
+
+        return (OscValueType)Marshal.ReadByte(ptr, TypeOffset) switch
+        {
+            OscValueType.Int => Marshal.ReadInt32(ptr, IntOffset),
+            OscValueType.Float => BitConverter.Int32BitsToSingle(Marshal.ReadInt32(ptr, FloatOffset)),
+            OscValueType.Bool => Marshal.ReadByte(ptr, BoolOffset) != 0,
+            _ => null,
+        };
+    }
+
     public OscMessage(string address, Type type)
     {
         Address = address;
@@ -52,6 +80,13 @@ public class OscMessage
             {
                 Type = oscType.oscType,
             };
+            // AllocHGlobal returns uninitialized memory, and a message can be queued before
+            // its first value is written: send-on-load parameters enqueue the moment an
+            // avatar makes them relevant. Whatever read it then - the VRChat Output tap,
+            // the native encoder - followed a garbage string pointer. The tap did exactly
+            // that on 2026-09-14 (AccessViolation in Marshal.PtrToStringUTF8, app killed).
+            // Start from a real value of the right type instead.
+            Marshal.StructureToPtr(oscValue, _meta.Value, false);
             _valueSetter = value =>
             {
                 oscValue.Value = value;
@@ -70,6 +105,8 @@ public class OscMessage
                 {
                     Type = OscUtils.TypeConversions.First(conv => conv.Key.Item1 == fields[i].FieldType).Value.oscType,
                 };
+                // Same as above: never leave a slot as uninitialized native memory.
+                Marshal.StructureToPtr(values[i], _meta.Value + Marshal.SizeOf<OscValue>() * i, false);
             }
             _valueSetter = value =>
             {

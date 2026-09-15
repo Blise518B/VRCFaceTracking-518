@@ -59,17 +59,12 @@ public static class OutputTap
 
             var entry = Entries.GetOrAdd(address, _ => new Entry { WindowStart = now });
 
-            object? value;
-            try
-            {
-                // Marshals from the message's native allocation - valid here,
-                // because the batch is alive until the send completes.
-                value = message.Value;
-            }
-            catch (Exception)
-            {
-                value = null;
-            }
+            // Scalars only, read in place. Going through message.Value marshalled the
+            // whole native struct, string pointer included, and a message queued before
+            // its first value was written made that pointer garbage: an access violation
+            // that took the app down (2026-09-14). It also allocated an array per
+            // message per tick while this page was open.
+            var value = message.PeekScalar();
 
             entry.LastValue = value;
             entry.TypeName = value switch
