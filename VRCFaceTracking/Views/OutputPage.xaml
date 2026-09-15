@@ -5,17 +5,34 @@
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
     xmlns:local="using:VRCFaceTracking.Helpers"
-    xmlns:Interactivity="using:Microsoft.Xaml.Interactivity"
     xmlns:services="using:VRCFaceTracking.Services"
     mc:Ignorable="d">
 
     <Page.Resources>
-        <local:EnumToStringConverter x:Key="EnumToStringConverter"/>
-
         <SolidColorBrush x:Key="LogLevelWarningBrush" Color="#FFFF23" />
         <SolidColorBrush x:Key="LogLevelErrorBrush" Color="#DB2543" />
         <SolidColorBrush x:Key="LogLevelCriticalBrush" Color="#A70023" />
 
+        <!-- One plain TextBlock per line, coloured by picking a template. Each line used to
+             carry six DataTriggerBehaviors, one per log level: 31,000 behaviour objects for
+             5,163 lines, all tracked by every garbage collection. -->
+        <DataTemplate x:Key="PlainLogLineTemplate" x:DataType="services:LogLine">
+            <TextBlock Foreground="{ThemeResource TextFillColorSecondaryBrush}" Text="{x:Bind Message}" />
+        </DataTemplate>
+        <DataTemplate x:Key="WarningLogLineTemplate" x:DataType="services:LogLine">
+            <TextBlock Foreground="{StaticResource LogLevelWarningBrush}" Text="{x:Bind Message}" />
+        </DataTemplate>
+        <DataTemplate x:Key="ErrorLogLineTemplate" x:DataType="services:LogLine">
+            <TextBlock Foreground="{StaticResource LogLevelErrorBrush}" Text="{x:Bind Message}" />
+        </DataTemplate>
+        <DataTemplate x:Key="CriticalLogLineTemplate" x:DataType="services:LogLine">
+            <TextBlock Foreground="{StaticResource LogLevelCriticalBrush}" Text="{x:Bind Message}" />
+        </DataTemplate>
+        <local:LogLineTemplateSelector x:Key="LogLineTemplateSelector"
+                                       PlainTemplate="{StaticResource PlainLogLineTemplate}"
+                                       WarningTemplate="{StaticResource WarningLogLineTemplate}"
+                                       ErrorTemplate="{StaticResource ErrorLogLineTemplate}"
+                                       CriticalTemplate="{StaticResource CriticalLogLineTemplate}" />
     </Page.Resources>
 
     <Grid>
@@ -49,9 +66,13 @@
           </Border>
 
         <Border Grid.Row="1" VerticalAlignment="Stretch" HorizontalAlignment="Stretch" Margin="0, 20, 0, 20" Padding="5" CornerRadius="6" BorderThickness="1" Background="{ThemeResource LayerFillColorDefaultBrush}">
-            <ScrollViewer 
-                x:Name = "LogScroller"
-                Loaded="LogScroller_OnLoaded"
+            <!-- ItemsRepeater directly inside the ScrollViewer only creates the lines in view.
+                 The ItemsControl it replaces sat in a StackPanel, which measures without a
+                 height limit, so every line in the log got its own elements. ItemsSource is
+                 set and cleared in code-behind, because the log is static and outlives the
+                 page: bound for good, it would keep every Output page ever opened alive. -->
+            <ScrollViewer
+                x:Name="LogScroller"
                 Padding="10"
                 IsTabStop="False"
                 UseSystemFocusVisuals="False"
@@ -59,36 +80,7 @@
                 VerticalScrollMode="Auto"
                 HorizontalScrollBarVisibility="Auto"
                 Height="Auto">
-                <StackPanel Orientation="Vertical" HorizontalAlignment="Stretch" VerticalAlignment="Stretch">
-                    <ItemsControl ItemsSource="{x:Bind FilteredLog}" VerticalAlignment="Stretch" HorizontalAlignment="Stretch">
-                        <ItemsControl.ItemTemplate>
-                            <DataTemplate x:DataType="services:LogLine">
-                                <TextBlock x:Name="LogLineText" Foreground="{ThemeResource TextFillColorSecondaryBrush}" Text="{x:Bind Message}" >
-                                    <Interactivity:Interaction.Behaviors>
-                                        <Interactivity:DataTriggerBehavior Binding="{x:Bind Level, Converter={StaticResource EnumToStringConverter}}" Value="(Trace)">
-                                            <Interactivity:ChangePropertyAction TargetObject="{Binding ElementName=LogLineText}" PropertyName="Foreground" Value="{ThemeResource TextFillColorSecondaryBrush}" />
-                                        </Interactivity:DataTriggerBehavior>
-                                        <Interactivity:DataTriggerBehavior Binding="{x:Bind Level, Converter={StaticResource EnumToStringConverter}}" Value="(Debug)">
-                                            <Interactivity:ChangePropertyAction TargetObject="{Binding ElementName=LogLineText}" PropertyName="Foreground" Value="{ThemeResource TextFillColorSecondaryBrush}" />
-                                        </Interactivity:DataTriggerBehavior>
-                                        <Interactivity:DataTriggerBehavior Binding="{x:Bind Level, Converter={StaticResource EnumToStringConverter}}" Value="(Information)">
-                                            <Interactivity:ChangePropertyAction TargetObject="{Binding ElementName=LogLineText}" PropertyName="Foreground" Value="{ThemeResource TextFillColorSecondaryBrush}" />
-                                        </Interactivity:DataTriggerBehavior>
-                                        <Interactivity:DataTriggerBehavior Binding="{x:Bind Level, Converter={StaticResource EnumToStringConverter}}" Value="(Warning)">
-                                            <Interactivity:ChangePropertyAction TargetObject="{Binding ElementName=LogLineText}" PropertyName="Foreground" Value="{StaticResource LogLevelWarningBrush}" />
-                                        </Interactivity:DataTriggerBehavior>
-                                        <Interactivity:DataTriggerBehavior Binding="{x:Bind Level, Converter={StaticResource EnumToStringConverter}}" Value="(Error)">
-                                            <Interactivity:ChangePropertyAction TargetObject="{Binding ElementName=LogLineText}" PropertyName="Foreground" Value="{StaticResource LogLevelErrorBrush}" />
-                                        </Interactivity:DataTriggerBehavior>
-                                        <Interactivity:DataTriggerBehavior Binding="{x:Bind Level, Converter={StaticResource EnumToStringConverter}}" Value="(Critical)">
-                                            <Interactivity:ChangePropertyAction TargetObject="{Binding ElementName=LogLineText}" PropertyName="Foreground" Value="{StaticResource LogLevelCriticalBrush}" />
-                                        </Interactivity:DataTriggerBehavior>
-                                   </Interactivity:Interaction.Behaviors>
-                                </TextBlock>
-                            </DataTemplate>
-                        </ItemsControl.ItemTemplate>
-                    </ItemsControl>
-                </StackPanel>
+                <ItemsRepeater x:Name="LogRepeater" ItemTemplate="{StaticResource LogLineTemplateSelector}" />
             </ScrollViewer>
         </Border>
     </Grid>
