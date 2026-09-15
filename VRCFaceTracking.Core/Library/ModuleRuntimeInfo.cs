@@ -60,6 +60,16 @@ public class ModuleRuntimeInfo
     /// </summary>
     public bool SupportsExpressionTracking;
 
+    // The two flags above start out false and are only ever AND-ed, so they never say
+    // anything. These record the handshake as it actually happened, for deciding when a
+    // module that got no slot is worth starting again.
+
+    /// <summary>What the module said it can provide, from its ReplyGetSupported.</summary>
+    public bool CanProvideEye, CanProvideExpression;
+
+    /// <summary>Which slots were still free when it was asked to initialize.</summary>
+    public bool OfferedEye, OfferedExpression;
+
     /// <summary>
     /// Queue of packets to send
     /// </summary>

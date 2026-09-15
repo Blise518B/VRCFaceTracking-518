@@ -56,6 +56,20 @@ public class UnifiedLibManager : ILibManager
     private const int HotPlugCheckEveryTicks = 5;   // ~10s between source re-checks
     #endregion
 
+    #region Standby
+    /// <summary>
+    /// Modules shut down because they initialized nothing, keyed by dll path. Guarded by
+    /// the <see cref="AvailableSandboxModules"/> lock so <see cref="GetRunningModulePaths"/>
+    /// sees both lists consistently. Cleared by every full re-initialize.
+    /// </summary>
+    private readonly Dictionary<string, StandbyModule> _standby = new(StringComparer.OrdinalIgnoreCase);
+
+    /// <param name="Name">Display name, for the log and the dormant card.</param>
+    /// <param name="WaitsForEye">It can do eye tracking but was not offered the slot.</param>
+    /// <param name="WaitsForExpression">It can do face tracking but was not offered the slot.</param>
+    private sealed record StandbyModule(string Name, bool WaitsForEye, bool WaitsForExpression);
+    #endregion
+
     private readonly AutoRestartService _autoRestartService;
     private readonly CrashReportService _crashReportService;
     private readonly ModuleActivationService _moduleActivationService;
@@ -116,6 +130,7 @@ public class UnifiedLibManager : ILibManager
                     if ( ++_hotPlugTicks >= HotPlugCheckEveryTicks )
                     {
                         _hotPlugTicks = 0;
+                        ResumeStandbyModules();
                         StartModulesWhoseSourceAppeared();
                     }
                 }
@@ -305,10 +320,170 @@ public class UnifiedLibManager : ILibManager
     {
         lock ( AvailableSandboxModules )
         {
+            // Standby counts as handled here, which is also what keeps the hot-plug check
+            // from restarting those modules every ten seconds: ResumeStandbyModules decides.
             return AvailableSandboxModules
                 .Where(m => m.Process is { HasExited: false } && !string.IsNullOrEmpty(m.SandboxModulePath))
                 .Select(m => m.SandboxModulePath)
+                .Concat(_standby.Keys)
                 .ToList();
+        }
+    }
+
+    /// <summary>
+    /// Shuts down a module that initialized nothing and parks it until a slot it can fill
+    /// comes free.
+    /// </summary>
+    /// <remarks>
+    /// Left running, such a module has no update pump, so its process hears nothing from
+    /// us, decides after 60 s that the connection is lost and kills itself. The supervisor
+    /// took that for a crash - crash report, restart, same slots taken, same result - once
+    /// a minute for as long as the session lasted: 586 times on 2026-09-14, with Virtual
+    /// Desktop holding both slots and Project Babble asking for them. Every round also
+    /// added a dozen lines to the log the Output page renders.
+    /// </remarks>
+    private void PutOnStandby(ModuleRuntimeInfo module)
+    {
+        var name = ModuleNameOf(module);
+        var reason = DescribeStandby(module);
+
+        lock ( AvailableSandboxModules )
+        {
+            // Out of the list before it exits, so the supervisor never sees a crash
+            AvailableSandboxModules.Remove(module);
+            if ( !string.IsNullOrEmpty(module.SandboxModulePath) )
+            {
+                _standby[module.SandboxModulePath] = new StandbyModule(
+                    name,
+                    module.CanProvideEye && !module.OfferedEye,
+                    module.CanProvideExpression && !module.OfferedExpression);
+            }
+        }
+
+        _logger.LogInformation("{module} is on standby: {reason}. Shutting its process down until that changes.",
+            name, reason);
+        MarkModuleDormant(name, $"Standby: {reason}", module.SandboxModulePath);
+
+        // Not on this thread. This is the IPC receive thread every other module's tracking
+        // data arrives on, and teardown sleeps and waits for the process to exit.
+        var teardown = new Thread(() =>
+        {
+            try
+            {
+                TeardownModuleSandboxed(module);
+            }
+            catch ( Exception e )
+            {
+                _logger.LogDebug("Standby teardown of {module} failed: {message}", name, e.Message);
+            }
+        })
+        {
+            IsBackground = true,
+            Name = "ModuleStandbyTeardown",
+        };
+        teardown.Start();
+    }
+
+    /// <summary>Plain-language reason a module ended up with no slot, naming who has them.</summary>
+    private string DescribeStandby(ModuleRuntimeInfo module)
+    {
+        var waitsForEye = module.CanProvideEye && !module.OfferedEye;
+        var waitsForFace = module.CanProvideExpression && !module.OfferedExpression;
+
+        if ( !module.CanProvideEye && !module.CanProvideExpression )
+        {
+            return "it reported no tracking it can provide";
+        }
+
+        if ( !waitsForEye && !waitsForFace )
+        {
+            return "it was offered a free tracking slot but started nothing (Restart tracking tries again)";
+        }
+
+        string? eyeHolder = null, faceHolder = null;
+        lock ( AvailableSandboxModules )
+        {
+            foreach ( var other in AvailableSandboxModules )
+            {
+                if ( ReferenceEquals(other, module) )
+                {
+                    continue;
+                }
+
+                if ( other.ModuleInformation?.UsingEye == true )
+                {
+                    eyeHolder ??= ModuleNameOf(other);
+                }
+                if ( other.ModuleInformation?.UsingExpression == true )
+                {
+                    faceHolder ??= ModuleNameOf(other);
+                }
+            }
+        }
+
+        eyeHolder ??= "another module";
+        faceHolder ??= "another module";
+
+        if ( waitsForEye && waitsForFace )
+        {
+            return eyeHolder == faceHolder
+                ? $"{eyeHolder} already provides eye and face tracking"
+                : $"{eyeHolder} already provides eye tracking and {faceHolder} face tracking";
+        }
+
+        return waitsForEye
+            ? $"{eyeHolder} already provides eye tracking"
+            : $"{faceHolder} already provides face tracking";
+    }
+
+    /// <summary>
+    /// Starts standby modules again once a slot they can fill is free - its holder died, or
+    /// went dormant with its source. Runs on the supervisor's hot-plug tick.
+    /// </summary>
+    private void ResumeStandbyModules()
+    {
+        if ( _suppressAutoRestart )
+        {
+            return;
+        }
+
+        List<KeyValuePair<string, StandbyModule>> ready;
+        lock ( AvailableSandboxModules )
+        {
+            if ( _standby.Count == 0 )
+            {
+                return;
+            }
+
+            var eyeFree = EyeStatus == ModuleState.Uninitialized;
+            var faceFree = ExpressionStatus == ModuleState.Uninitialized;
+            ready = _standby
+                .Where(s => ( s.Value.WaitsForEye && eyeFree ) || ( s.Value.WaitsForExpression && faceFree ))
+                .ToList();
+            foreach ( var entry in ready )
+            {
+                _standby.Remove(entry.Key);
+            }
+        }
+
+        foreach ( var (path, standby) in ready )
+        {
+            // The source may have gone while it waited; starting it then just parks it again
+            if ( !SourceStillPresentFor(path, out var goneReason) )
+            {
+                MarkModuleDormant(standby.Name, goneReason, path);
+                continue;
+            }
+
+            // Out of standby either way: if the cap refuses now, the hot-plug check below
+            // sees a module whose source is present and starts it once the cap allows.
+            if ( !CanRestart(path) )
+            {
+                continue;
+            }
+
+            _logger.LogInformation("{module}: a tracking slot it can fill is free again. Starting it now.", standby.Name);
+            InitialiseSandboxesBaseOnPaths(new[] { path });
         }
     }
 
@@ -730,6 +905,12 @@ public class UnifiedLibManager : ILibManager
             eyeAvailable        = EyeStatus == ModuleState.Uninitialized,
         };
 
+        // Kept for standby: if it initializes nothing, these say what it is waiting for
+        module.CanProvideEye        = packet.eyeAvailable;
+        module.CanProvideExpression = packet.expressionAvailable;
+        module.OfferedEye           = initPacket.eyeAvailable;
+        module.OfferedExpression    = initPacket.expressionAvailable;
+
         _logger.LogInformation("Got supported for module {module}. Expr: {expr} Eye: {eye}...",
             module.ModuleClassName, initPacket.expressionAvailable, initPacket.eyeAvailable);
         _sandboxServer.SendData(initPacket, port);
@@ -754,9 +935,11 @@ public class UnifiedLibManager : ILibManager
         _logger.LogInformation("Got init for module {module}. Eye: {eye} Expr: {expr}...",
             module.ModuleClassName, packet.eyeSuccess, packet.expressionSuccess);
 
-        // Initialized nothing: no slots, no update pump, and nothing worth listing.
+        // Initialized nothing: no slots, no update pump, and nothing worth listing. It must
+        // not stay running either - see PutOnStandby for what that turned into.
         if ( !packet.eyeSuccess && !packet.expressionSuccess )
         {
+            PutOnStandby(module);
             return;
         }
 
@@ -767,8 +950,19 @@ public class UnifiedLibManager : ILibManager
             _sandboxServer.SendData(new EventStatusUpdatePacket { ModuleState = module.Status }, port);
         };
 
-        EyeStatus        = packet.eyeSuccess        ? ModuleState.Active : ModuleState.Uninitialized;
-        ExpressionStatus = packet.expressionSuccess ? ModuleState.Active : ModuleState.Uninitialized;
+        // Claim only, never release. This module not doing a slot says nothing about who
+        // owns it: after the 2026-09-14 re-init, Babble held face tracking, then Virtual
+        // Desktop came up with eyes only and this reset the face slot to "free" - so the
+        // next module to start would have been offered a slot that was taken. Slots are
+        // released where their owner goes away: HandleDeadModule and the full teardown.
+        if ( packet.eyeSuccess )
+        {
+            EyeStatus = ModuleState.Active;
+        }
+        if ( packet.expressionSuccess )
+        {
+            ExpressionStatus = ModuleState.Active;
+        }
 
         module.ModuleInformation.Active = true;
         lock ( AvailableSandboxModules )
@@ -1096,6 +1290,9 @@ public class UnifiedLibManager : ILibManager
         {
             sandboxSnapshot = AvailableSandboxModules.ToList();
             AvailableSandboxModules.Clear();
+
+            // Everything starts from scratch now, so nothing is waiting for a slot any more
+            _standby.Clear();
         }
 
         TeardownEach(sandboxSnapshot);
