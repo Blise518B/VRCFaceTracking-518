@@ -135,13 +135,14 @@ correct. Silent swallowing is how the IPC bug stayed invisible for so long.
 native function directly) but still exists with its old signature. Retire it or
 make it synchronous so nobody reintroduces the hop.
 
-### 10. Every avatar change resets all parameters four times — P: 16 (I 2, R 2, E 2)
+### 10. Every avatar change resets all parameters twice — P: 16 (I 2, R 2, E 2)
 Native OSC and the 518 router both deliver `/avatar/change`, so `HandleNewAvatar` runs
 twice (every avatar load is in the log twice). Each run resets all ~600 VRCFT
-parameters from the OSCQuery tree, and then again inside `AvatarConfigParser.ParseAvatar`,
-which is only called to look up the avatar's name (and clears the send queue on the way).
-Each reset regex-matches every parameter against the avatar's ~800. Drop a repeated
-`/avatar/change` for the same id within a second, and look the name up without a reset.
+parameters from the OSCQuery tree, and each reset regex-matches every parameter against
+the avatar's ~800. Drop a repeated `/avatar/change` for the same id within a second.
+(Half of this went with `78842d1`: the name lookup through `AvatarConfigParser.ParseAvatar`
+reset everything a second time per run; the name now comes from `/avatar/name`, or from a
+lookup that resets nothing.)
 
 ### 11. Module IPC allocates ~3 KB per frame — P: 8 (I 1, R 1, E 2)
 `VrcftPacketDecoder` makes a new `ReplyUpdatePacket` (two float arrays) for every
