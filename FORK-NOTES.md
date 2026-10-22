@@ -314,6 +314,47 @@ built-in control behaviour. The brushes sit at dictionary top level rather than 
 
 ---
 
+## 9. VRChat native face tracking
+
+`VRCFaceTracking.Core/OSC/FaceTrackingBlob.cs`, `VRCFaceTracking.Core/Services/NativeFaceTrackingSender.cs`
+
+VRChat's open beta (Avatars SDK 3.10.6-beta.1 and up) can drive an avatar's face itself. An
+avatar uploaded with **Use All Tracking Keys** in its Face Tracking settings takes all 102
+Unified Expressions keys from one OSC message, and VRChat syncs them to other players without
+any synced parameters. This feeds it the way upstream 6.0 does, ported onto the 5.4.5 base:
+
+- **Detection.** VRChat's OSCQuery marks such an avatar with `/avatar/avatarfullfacetracking`
+  (`IAvatarInfo.FullFaceTracking`; `fullFaceTracking` in the OSC config JSON counts too).
+- **Sending.** For those avatars every tracking tick sends `/tracking/face/v1`: one blob of
+  exactly 102 bytes, one byte per key (value x 255), in VRChat's fixed order. First the 14 eye
+  keys (look in/out/up/down per eye from gaze, closed from openness, dilation and constriction
+  from pupil size around 5 mm), then the 88 expressions in `UnifiedExpressions` order. It is
+  encoded after the mutations, so curves, calibration and Neutral Override all apply.
+- **Nothing else.** Such an avatar gets no v2 parameters and no `/tracking/eye/*` messages,
+  whatever it declares. Loading a normal avatar turns them back on.
+- **Built in C#, not by fti_osc.** The 132-byte datagram's header is written once; each tick
+  only rewrites the payload, without allocating. Upstream rebuilt `fti_osc` with a blob type
+  instead, which changes the `OscValue` layout under every message sent and received - only
+  worth taking together with the rest of 6.0.
+- **Avatar name.** VRChat 2026.4.1 (open beta) serves `/avatar/name` over OSCQuery, used when
+  present. Older builds still get the name from the OSC config JSON, but only the name: that
+  lookup used to reset every parameter a second time and clear the send queue on every load.
+
+Where to see it: the Home page's avatar card shows **Native face tracking** (and 0 parameters),
+the lite monitor shows "native face tracking" instead of a parameter count, the VRChat Output
+page lists `/tracking/face/v1` as a 132-byte blob at about 100/s, and
+`tools/osc-capture/check.py` prints a `[native]` line with the blob rate and sizes.
+
+Not verified against VRChat yet: the eye-look scale. Gaze goes out as its raw tangent clamped
+to 0-1 (1 = 45 degrees), the same as upstream; VRChat doesn't document what angle
+`EyeLook* = 1` stands for.
+
+Upstream counterparts, for later syncs: `BinaryFaceDataSender` and `UnifiedTrackingData.CopyTo`
+(merged with the Avalonia rewrite, PR #372), the pupil bytes from PR #395, `/avatar/name` from
+PR #393.
+
+---
+
 ## Building
 
 Requires .NET 10 SDK on Windows.

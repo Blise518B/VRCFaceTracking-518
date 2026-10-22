@@ -46,6 +46,7 @@ public sealed partial class AvatarInfoControl : UserControl
     {
         var avatar = (IAvatarInfo)GetValue(dp);
         LocalTestWarning.Visibility = avatar.Id.StartsWith("local:") ? Visibility.Visible : Visibility.Collapsed;
+        NativeFaceTrackingBadge.Visibility = avatar.FullFaceTracking ? Visibility.Visible : Visibility.Collapsed;
     }
 
     private void OnNewAvatarParameters(DependencyObject d, DependencyProperty dp)

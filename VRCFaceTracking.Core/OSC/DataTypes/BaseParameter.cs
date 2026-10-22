@@ -112,8 +112,18 @@ public class BaseParam<T> : Parameter where T : struct
         _sendOnLoad = sendOnLoad;
     }
 
-    public override Parameter[] ResetParam(IParameterDefinition[] newParams)
+    public override Parameter[] ResetParam(IParameterDefinition[] newParams, IAvatarInfo avatarInfo)
     {
+        // A native face tracking avatar gets every key from /tracking/face/v1 and VRChat syncs
+        // them itself, so no v2 parameter is sent to it, whatever it declares (as upstream 6.0).
+        if (avatarInfo.FullFaceTracking)
+        {
+            Relevant = false;
+            OscMessage.Address = DefaultPrefix + _paramName;
+
+            return Array.Empty<Parameter>();
+        }
+
         if (ParameterSenderService.AllParametersRelevantStatic)
         {
             Relevant = true;

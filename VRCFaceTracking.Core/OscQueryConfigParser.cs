@@ -45,21 +45,32 @@ public class OscQueryConfigParser(
             var paramList = new List<Parameter>();
             foreach (var parameter in UnifiedTracking.AllParameters)
             {
-                paramList.AddRange(parameter.ResetParam(avatarInfo.Parameters));
+                paramList.AddRange(parameter.ResetParam(avatarInfo.Parameters, avatarInfo));
             }
 
-            // God help me why is this something I need to do to get the avatar name
-            // this impl is really disappointing vrc
-            var configFileInfo = await configParser.ParseAvatar(avatarInfo.Id);
-            parserLogger.LogInformation($"Attempting to resolve avatar config file for {avatarInfo.Id}");
-            if (!string.IsNullOrEmpty(configFileInfo?.avatarInfo.Name))
+            if (avatarInfo.FullFaceTracking)
             {
-                avatarInfo.Name = configFileInfo.Value.avatarInfo.Name;
-                parserLogger.LogInformation($"Successfully found config containing avatar name {avatarInfo.Name}");
+                parserLogger.LogInformation("Avatar {avatarId} uses VRChat's native face tracking", avatarInfo.Id);
             }
-            else
+
+            // Builds without /avatar/name (everything before 2026.4.1) only have the name in the
+            // legacy OSC config JSON. Only the name is taken from there: going through
+            // ParseAvatar reset every parameter a second time, from a file that may not
+            // carry the native face tracking flag.
+            if (string.IsNullOrEmpty(avatarInfo.Name))
             {
-                parserLogger.LogWarning("Odd. Our attempt to find the legacy osc config json for this avatar failed.");
+                parserLogger.LogInformation($"Attempting to resolve avatar config file for {avatarInfo.Id}");
+                var name = await configParser.FindAvatarName(avatarInfo.Id);
+                if (!string.IsNullOrEmpty(name))
+                {
+                    avatarInfo.Name = name;
+                    parserLogger.LogInformation($"Successfully found config containing avatar name {avatarInfo.Name}");
+                }
+                else
+                {
+                    avatarInfo.Name = "Unknown";
+                    parserLogger.LogWarning("Odd. Our attempt to find the legacy osc config json for this avatar failed.");
+                }
             }
 
             return (avatarInfo, paramList);

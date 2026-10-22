@@ -20,6 +20,13 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ## [Unreleased]
 
 ### Added
+- **VRChat native face tracking (open beta).** Avatars uploaded with "Use All Tracking
+  Keys" get the whole face from one `/tracking/face/v1` message per tick - all 102 Unified
+  Expressions keys, eyes and pupils included - and VRChat syncs it itself, so no synced
+  parameters are spent on it. Such an avatar gets no v2 parameters or `/tracking/eye`
+  messages; the Home page and the lite monitor say when an avatar uses it. The avatar name
+  now comes from VRChat's new `/avatar/name`, and the fallback lookup in the OSC config
+  JSON no longer resets every parameter a second time on each avatar load.
 - **Lost parameter values repair themselves.** VRCFT only sends a value when it changes,
   so a message VRChat drops left that parameter wrong until it happened to change again -
   an eyelid stuck half-closed after a blink, or an expression's sign bit wrong for

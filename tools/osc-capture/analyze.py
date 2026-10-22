@@ -76,6 +76,21 @@ for a in eye:
     changes = sum(1 for x, y in zip(vals, vals[1:]) if x[1] != y[1]) + 1
     print(f"   {a.split('/')[-1]:16s} sent {len(vals):6d}  real changes {changes:5d}  -> {len(vals)/max(changes,1):5.1f}x duplication")
 
+# ---- 2b. native face tracking: one 102-byte /tracking/face/v1 blob per tick (byte = value * 255)
+blobs = [v for _, v in sent.get("/tracking/face/v1", []) if isinstance(v, bytes)]
+if blobs:
+    bt = [t for t, v in sent["/tracking/face/v1"] if isinstance(v, bytes)]
+    rate = (len(bt) - 1) / (bt[-1] - bt[0]) if len(bt) > 1 and bt[-1] > bt[0] else 0
+    sizes = collections.Counter(len(v) for v in blobs)
+    print(f"\n[native] /tracking/face/v1: {len(blobs)} blobs, {rate:.1f}/s, payload sizes {dict(sizes)} "
+          f"(VRChat ignores any size but 102)")
+    good = [v for v in blobs if len(v) == 102]
+    for name, idx in (("EyeClosedRight", 8), ("EyeClosedLeft", 9), ("JawOpen", 36), ("MouthClosed", 43)):
+        vals = [g[idx] / 255 for g in good]
+        if vals:
+            print(f"   {name:16s} min {min(vals):.2f}  max {max(vals):.2f}  "
+                  f"changes {sum(1 for x, y in zip(vals, vals[1:]) if x != y)}")
+
 # ---- 3. divergence: last value VRCFT sent vs last value VRChat echoed
 def last_at(series, times, t):
     i = bisect.bisect_right(times, t) - 1

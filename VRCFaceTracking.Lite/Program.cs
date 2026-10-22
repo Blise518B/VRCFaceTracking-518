@@ -147,6 +147,7 @@ public static class Program
             using var cts = new CancellationTokenSource();
             await recv.StartAsync(cts.Token);
             await services.GetRequiredService<ParameterSenderService>().StartAsync(cts.Token);
+            await services.GetRequiredService<NativeFaceTrackingSender>().StartAsync(cts.Token);
 
             libManager.Initialize();
 
@@ -206,6 +207,7 @@ public static class Program
         services.AddSingleton<OscQueryService>();
         services.AddSingleton<MulticastDnsService>();
         services.AddSingleton<ParameterSenderService>();
+        services.AddSingleton<NativeFaceTrackingSender>();
         services.AddSingleton<UnifiedTracking>();
         services.AddSingleton<UnifiedTrackingMutator>();
         services.AddSingleton<CrashReportService>();
@@ -385,8 +387,11 @@ public static class Program
             var avatar = SafeAvatar(oscQuery);
             lines.Add(avatar == null
                 ? Line(new Seg("    not connected", Alert))
-                : Line(new Seg($"    {Trim(avatar.Value.Name, 34),-34} ", Value),
-                       new Seg(avatar.Value.Parameters.ToString(), Value), new Seg(" parameters", Dim)));
+                : avatar.Value.Native
+                    ? Line(new Seg($"    {Trim(avatar.Value.Name, 34),-34} ", Value),
+                           new Seg("native face tracking", Value), new Seg(" (/tracking/face/v1)", Dim))
+                    : Line(new Seg($"    {Trim(avatar.Value.Name, 34),-34} ", Value),
+                           new Seg(avatar.Value.Parameters.ToString(), Value), new Seg(" parameters", Dim)));
 
             lines.Add(Blank);
             lines.Add(Line(new Seg("  OSC", Header)));
@@ -576,7 +581,7 @@ public static class Program
         }
     }
 
-    private static (string Name, int Parameters)? SafeAvatar(OscQueryService oscQuery)
+    private static (string Name, int Parameters, bool Native)? SafeAvatar(OscQueryService oscQuery)
     {
         try
         {
@@ -585,7 +590,7 @@ public static class Program
             {
                 return null;
             }
-            return (info.Name, oscQuery.AvatarParameters?.Count ?? 0);
+            return (info.Name, oscQuery.AvatarParameters?.Count ?? 0, info.FullFaceTracking);
         }
         catch (Exception)
         {

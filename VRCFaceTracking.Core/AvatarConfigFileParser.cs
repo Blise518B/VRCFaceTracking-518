@@ -39,8 +39,36 @@ public class AvatarConfigParser
             _lastAvatarId = newId;
             return (new NullAvatarDef(newId.Substring(10), newId), paramList);
         }*/
-            
-        AvatarConfigFile avatarConfig = null;
+
+        var avatarConfig = await FindConfig(newId);
+        if (avatarConfig == null)
+        {
+            _logger.LogError("Avatar config file for {avatarId} not found", newId);
+            return null;
+        }
+
+        _logger.LogInformation("Parsing config file for avatar: {avatarName}", avatarConfig.name);
+        ParameterSenderService.Clear();
+        var parameters = avatarConfig.parameters.Where(param => param.input != null).ToArray<IParameterDefinition>();
+
+        foreach (var parameter in UnifiedTracking.AllParameters)
+        {
+            paramList.AddRange(parameter.ResetParam(parameters, avatarConfig));
+        }
+
+        //_lastAvatarId = newId;
+        return (avatarConfig, paramList);
+    }
+
+    /// <summary>
+    /// The avatar's name from its OSC config JSON, without resetting any parameter. For VRChat
+    /// builds that don't serve /avatar/name over OSCQuery yet.
+    /// </summary>
+    public async Task<string?> FindAvatarName(string avatarId) =>
+        string.IsNullOrEmpty(avatarId) ? null : (await FindConfig(avatarId))?.name;
+
+    private async Task<AvatarConfigFile?> FindConfig(string avatarId)
+    {
         foreach (var userFolder in Directory.GetDirectories(VRChat.VRCOSCDirectory)
                      .Where(folder => Directory.Exists(Path.Combine(folder, "Avatars"))))
         {
@@ -50,12 +78,11 @@ public class AvatarConfigParser
                 {
                     var configText = await File.ReadAllTextAsync(avatarFile);
                     var tempConfig = JsonSerializer.Deserialize<AvatarConfigFile>(configText);
-                    if (tempConfig == null || tempConfig.id != newId)
+                    if (tempConfig == null || tempConfig.id != avatarId)
                     {
                         continue;
                     }
-                    avatarConfig = tempConfig;
-                    break;
+                    return tempConfig;
                 }
                 catch (JsonException ex)
                 {
@@ -77,22 +104,6 @@ public class AvatarConfigParser
             }
         }
 
-        if (avatarConfig == null)
-        {
-            _logger.LogError("Avatar config file for {avatarId} not found", newId);
-            return null;
-        }
-
-        _logger.LogInformation("Parsing config file for avatar: {avatarName}", avatarConfig.name);
-        ParameterSenderService.Clear();
-        var parameters = avatarConfig.parameters.Where(param => param.input != null).ToArray<IParameterDefinition>();
-
-        foreach (var parameter in UnifiedTracking.AllParameters)
-        {
-            paramList.AddRange(parameter.ResetParam(parameters));
-        }
-
-        //_lastAvatarId = newId;
-        return (avatarConfig, paramList);
+        return null;
     }
 }

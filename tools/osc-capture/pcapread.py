@@ -62,6 +62,9 @@ def parse_osc(b):
             vals.append(False)
         elif t == "s":
             s, i = _str(b, i); vals.append(s)
+        elif t == "b":
+            n, = struct.unpack(">i", b[i:i + 4])
+            vals.append(bytes(b[i + 4:i + 4 + n])); i += 4 + ((n + 3) & ~3)
         else:
             break
     out.append((addr, vals[0] if len(vals) == 1 else vals))
