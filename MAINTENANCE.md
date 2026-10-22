@@ -16,9 +16,14 @@ These are load-bearing. Breaking one produces a symptom that looks like
 1. **Nothing on the 100Hz path may block.** The send loop is
    `ParameterSenderService.ExecuteAsync` -> `UnifiedTracking.UpdateData` ->
    mutations -> parameters -> `OscSendService`. No file I/O, no process
-   enumeration, no sockets with timeouts, no `Task.Run` hops, no LINQ
-   allocations. If you need a source name or a module name there, cache it
-   (`TrackingSourceDetector.ScanCached`, not `Scan`).
+   enumeration, no sockets with timeouts, no `Task.Run` hops, and no allocations
+   at all - not even boxing. Whatever the loop allocates, it eventually starts a
+   garbage collection on the tracking thread itself: boxing in `BaseParam.ParamValue`
+   (5 KB a tick) did, and showed up as the periodic ~45 ms "parameters" spike. Write
+   values with `OscMessage.SetValue<T>`, never the `object` `Value` setter. If you
+   need a source name or a module name there, cache it
+   (`TrackingSourceDetector.ScanCached`, not `Scan`). PerfWatch's "(GC n ms of it)"
+   after "parameters max" says when a collection landed inside the phase.
 2. **Handlers on the IPC receive path may not throw.** An exception there used
    to fault the receive task and silently stop *all* tracking. There are now two
    catch-alls (`HandleModulePacket`, `UdpFullDuplex.ListenAsync`); keep both.
@@ -37,7 +42,10 @@ These are load-bearing. Breaking one produces a symptom that looks like
    too. The Output page once held 5,163 log lines with six behaviours each and made
    every GC a 90 ms - 1.4 s tracking freeze. Cap what a page shows, virtualize the
    list, and detach from static collections on `Unloaded` (a bound `ItemsSource` on a
-   static collection keeps the whole page alive).
+   static collection keeps the whole page alive). The same goes for anything a page or a
+   transient view model hooks on a singleton: pages are created anew on every
+   navigation, so a `+=` in a constructor is one more page kept alive per visit.
+   Subscribe on `Loaded`, unsubscribe on `Unloaded` (`MainViewModel.Start/Stop`).
 8. **A module process must never be left without an update pump.** It kills itself
    after 60 s of silence and the supervisor reads that as a crash. A module that
    initializes nothing goes on standby (`UnifiedLibManager.PutOnStandby`).
@@ -50,6 +58,12 @@ These are load-bearing. Breaking one produces a symptom that looks like
    VRChat does drop OSC messages. `ParameterSenderService.ResendUnchanged` re-sends
    settled values (100 ms after settling, then about once a second); don't remove it
    to save traffic without measuring confirmation rates first.
+11. **A received `OscMessage` lives only as long as its handlers run.** The receive
+   loops (`OscRecvService`, `OscRouterClient`) call `Release()` once
+   `OnMessageReceived` returns, which frees its native copy and takes it off the
+   finalizer queue: VRChat echoes thousands of messages a second, and as finalizable
+   objects they kept the GC busy on their own. A handler that needs a value later
+   must copy it out (`msg.Value`) while it runs; afterwards `Value` is null.
 
 ---
 
@@ -117,6 +131,26 @@ correct. Silent swallowing is how the IPC bug stayed invisible for so long.
 native function directly) but still exists with its old signature. Retire it or
 make it synchronous so nobody reintroduces the hop.
 
+### 10. Every avatar change resets all parameters four times — P: 16 (I 2, R 2, E 2)
+Native OSC and the 518 router both deliver `/avatar/change`, so `HandleNewAvatar` runs
+twice (every avatar load is in the log twice). Each run resets all ~600 VRCFT
+parameters from the OSCQuery tree, and then again inside `AvatarConfigParser.ParseAvatar`,
+which is only called to look up the avatar's name (and clears the send queue on the way).
+Each reset regex-matches every parameter against the avatar's ~800. Drop a repeated
+`/avatar/change` for the same id within a second, and look the name up without a reset.
+
+### 11. Module IPC allocates ~3 KB per frame — P: 8 (I 1, R 1, E 2)
+`VrcftPacketDecoder` makes a new `ReplyUpdatePacket` (two float arrays) for every
+datagram, on top of `UdpReceiveResult`'s own buffer: ~250 KB/s at 72-90 Hz. It dies
+young, so each collection stays cheap, but since the send loop and the received OSC
+messages were fixed it is the largest steady allocator left. A reused packet per
+decoder and a reused receive buffer would remove it. Measure before and after.
+
+### 12. `OscQueryService` assigns `OnMessageReceived` instead of adding to it — P: 10 (I 1, R 1, E 1)
+`recvService.OnMessageReceived = HandleNewMessage` wipes every handler attached
+before `InitializeAsync`. The lite build works around it; in the full app a Home
+page that loaded first counts no incoming messages. Use `+=`.
+
 ---
 
 ## Done
@@ -142,3 +176,12 @@ make it synchronous so nobody reintroduces the hop.
 - **Loop ran at 64Hz instead of 100Hz** (`5c38b5f`). Windows 11 ignores
   `timeBeginPeriod` for minimized/occluded windows — i.e. the whole VR session.
   Opted out via `PROCESS_POWER_THROTTLING_IGNORE_TIMER_RESOLUTION`.
+- **Send-loop gaps and the ~45 ms "parameters" spike were GC** (`abd1396`). The
+  loop boxed ~5 KB per tick, so collections started on the tracking thread itself.
+  Received OSC messages were finalizable, and the source sweep left ~450 `Process`
+  objects per pass, so collections came often and went deep. Settings, VRChat Output,
+  Home's view model and probably Mutations leaked once per visit, and full collections
+  got slower as the session went on (the 16 h log of 2026-10-21: ~270 ms stalls once a
+  minute after the first 20 minutes). Invariants 1, 7 and 11. Also fixed: the BrokenEye
+  probe's abandoned connect behind "Ignored an abandoned socket task" (~6/min).
+  PerfWatch now separates GC from scheduling per tick.

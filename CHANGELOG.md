@@ -29,8 +29,48 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   over the network. `/vrcft/settings/resendUnchanged` (bool) switches it at runtime.
   Measured A/B after the leak fix below, one minute each: without it two values stayed
   wrong for 275 and 355 ms; with it nothing stayed wrong for 100 ms or more.
+- **PerfWatch says how much of a hitch was garbage collection.** The once-a-minute line
+  now gives the GC share of the longest gap and of the slowest parameters phase, counts
+  ticks of 30 ms or more and how many of them were GC, and lists the minute's collections
+  by generation with their total pause and the heap size. The stall warning's "GC paused"
+  figure now covers that tick only. It used to add up every pause since the last stall or
+  summary, so a 152 ms stall could report 214 ms of GC.
 
 ### Fixed
+- **Tracking hitched every minute, and after about 20 minutes froze for a quarter of a
+  second about once a minute.** Every one of these hitches was the garbage collector
+  pausing the whole app, and four things kept it busy:
+  - The send loop boxed every parameter value it compared or wrote, about 5 KB per tick,
+    so collections often started on the tracking thread itself. That was the ~45 ms
+    "parameters" spike PerfWatch showed every other minute.
+  - Every OSC message VRChat echoes back (thousands a second, twice with the 518 router)
+    became an object with a finalizer, which survives its first collection. At 3,000
+    messages/s, over 100,000 of them were waiting for the finalizer at once, and 8 of 9
+    collections in five minutes reached gen1 or gen2.
+  - The 10 s tracking-source sweep left about 450 undisposed `Process` objects to the
+    finalizer each time.
+  - Pages leaked. Each visit to Settings or VRChat Output kept that whole page alive for
+    the rest of the session, each visit to Home left a view model with a ticking timer
+    behind, and the Mutations page most likely leaked too. The more live UI there is, the
+    longer every full collection takes: the 16-hour session of 2026-10-21 started with
+    ~45 ms pauses and spent the rest of the day with 150-550 ms stalls (about 270 ms on
+    average) roughly once a minute.
+  The send loop now allocates nothing, received messages are freed as soon as they are
+  handled, the sweep disposes what it enumerates, and pages attach to long-lived services
+  only while they are shown. Measured offline on the real send path with this avatar's
+  parameters, VRChat's echo at 3,000 messages/s and the sweep running, five minutes each:
+  the send loop went from 5.2 KB per tick to nothing, and no collection started inside the
+  parameters phase any more (3 before; slowest phase 28 ms -> 0.35 ms). Total GC pause
+  fell from 202 to 139 ms with the send loop fixed and to 22 ms with the received messages
+  freed as well. Collections reaching gen1 or gen2 went from 8 to 2, the longest gap from
+  39 to 14 ms, and gaps over 20 ms from 8 to none. That test heap is small; in the app,
+  with its UI on the heap, the same collections cost 45 ms and more each.
+- **"Ignored an abandoned socket task from connection teardown" six times a minute.** The
+  BrokenEye check in the tracking-source sweep gave up on its connect to 127.0.0.1:5555
+  after 250 ms and closed the socket with the connect still pending. Windows takes about
+  two seconds to refuse a loopback connect, so whenever BrokenEye was not running this
+  happened on every sweep: harmless, but 2,685 log lines in a 7.5-hour session. The check
+  now cancels its connect and waits for it (29 to 0 in five minutes).
 - **Binary-encoded parameters multiplied with every avatar load, until the face
   stuttered and stuck.** Each load created a new set of bit parameters and dropped the
   old set without unsubscribing it, so every set ever made kept computing and sending
