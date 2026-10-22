@@ -48,9 +48,7 @@ public partial class MainViewModel : ObservableRecipient
         var installedLegacyModules = moduleDataService.GetLegacyModules().Count();
         NoModulesInstalled = !installedNewModules.Any() && installedLegacyModules == 0;
         
-        // Message Timer
-        OscRecvService.OnMessageReceived += MessageReceived;
-        OscSendService.OnMessagesDispatched += MessageDispatched;
+        // Message Timer - counting runs only while the Home page shows (Start/Stop)
         msgCounterTimer = new DispatcherTimer
         {
             Interval = TimeSpan.FromSeconds(1)
@@ -59,21 +57,36 @@ public partial class MainViewModel : ObservableRecipient
         {
             MessagesInPerSec = _messagesRecvd;
             _messagesRecvd = 0;
-            
+
             MessagesOutPerSec = _messagesSent;
             _messagesSent = 0;
         };
+    }
+
+    /// <summary>
+    /// Called by MainPage on Loaded. This view model is transient - a new one per visit to
+    /// Home - and it used to subscribe and start its timer in the constructor, with only a
+    /// finalizer to undo it. The singleton services' handlers and the running timer kept
+    /// every one of them alive, so each visit added a permanent timer and another handler
+    /// on the OSC send path.
+    /// </summary>
+    public void Start()
+    {
+        OscRecvService.OnMessageReceived -= MessageReceived;
+        OscRecvService.OnMessageReceived += MessageReceived;
+        OscSendService.OnMessagesDispatched -= MessageDispatched;
+        OscSendService.OnMessagesDispatched += MessageDispatched;
         msgCounterTimer.Start();
+    }
+
+    /// <summary>Called by MainPage on Unloaded; see <see cref="Start"/>.</summary>
+    public void Stop()
+    {
+        OscRecvService.OnMessageReceived -= MessageReceived;
+        OscSendService.OnMessagesDispatched -= MessageDispatched;
+        msgCounterTimer.Stop();
     }
 
     private void MessageReceived(OscMessage msg) => _messagesRecvd++;
     private void MessageDispatched(int msgCount) => _messagesSent += msgCount;
-
-    ~MainViewModel()
-    {
-        OscRecvService.OnMessageReceived -= MessageReceived;
-        OscSendService.OnMessagesDispatched -= MessageDispatched;
-        
-        msgCounterTimer.Stop();
-    }
 }

@@ -252,7 +252,14 @@ public partial class OscRouterClient : ObservableObject
                 }
 
                 MessagesReceived++;
-                _recvService.OnMessageReceived(message);
+                try
+                {
+                    _recvService.OnMessageReceived(message);
+                }
+                finally
+                {
+                    message.Release(); // See OscMessage.Release
+                }
             }
             catch (OperationCanceledException)
             {

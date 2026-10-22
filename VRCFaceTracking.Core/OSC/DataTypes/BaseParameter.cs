@@ -67,11 +67,14 @@ public class BaseParam<T> : Parameter where T : struct
 
     public T ParamValue
     {
-        get => (T)OscMessage.Value;
+        get => OscMessage.GetValue<T>();
         set
         {
+            // Allocation-free on purpose: this runs for every relevant parameter on every
+            // tick. value.Equals(_lastValue) took the object overload and boxed the stored
+            // value each time, and the boxing Value setter did the same on every change.
             var now = Environment.TickCount64;
-            if (value.Equals(_lastValue))
+            if (_lastValue.HasValue && EqualityComparer<T>.Default.Equals(value, _lastValue.GetValueOrDefault()))
             {
                 if (ParameterSenderService.ResendUnchanged && now >= _resendAtMs)
                 {
@@ -82,7 +85,7 @@ public class BaseParam<T> : Parameter where T : struct
                 return;
             }
 
-            OscMessage.Value = value;
+            OscMessage.SetValue(value);
             _lastValue = value;
             _resendAtMs = now + SettleResendMs;
             Enqueue();

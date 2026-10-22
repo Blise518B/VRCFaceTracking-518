@@ -1,4 +1,5 @@
 ﻿using System.Reflection;
+using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using VRCFaceTracking.OSC;
 
@@ -65,6 +66,71 @@ public class OscMessage
             OscValueType.Bool => Marshal.ReadByte(ptr, BoolOffset) != 0,
             _ => null,
         };
+    }
+
+    /// <summary>
+    /// Writes a bool, int or float straight into the native value slot. The object-typed
+    /// <see cref="Value"/> setter boxes the value and then boxes the whole OscValue again
+    /// for StructureToPtr. Every parameter that changed did that every tick, which made the
+    /// tracking thread allocate about 5 KB per tick. Once that added up to a GC, the
+    /// collection ran on the tracking thread itself: the periodic ~45 ms "parameters"
+    /// spikes in PerfWatch. Other types (structs) fall back to <see cref="Value"/>.
+    /// </summary>
+    public void SetValue<T>(T value) where T : struct
+    {
+        var ptr = _meta.Value;
+        if (_meta.ValueLength == 1 && ptr != IntPtr.Zero)
+        {
+            var type = (OscValueType)Marshal.ReadByte(ptr, TypeOffset);
+            if (typeof(T) == typeof(float) && type == OscValueType.Float)
+            {
+                Marshal.WriteInt32(ptr, FloatOffset, BitConverter.SingleToInt32Bits(Unsafe.As<T, float>(ref value)));
+                return;
+            }
+
+            if (typeof(T) == typeof(bool) && type == OscValueType.Bool)
+            {
+                Marshal.WriteByte(ptr, BoolOffset, Unsafe.As<T, bool>(ref value) ? (byte)1 : (byte)0);
+                return;
+            }
+
+            if (typeof(T) == typeof(int) && type == OscValueType.Int)
+            {
+                Marshal.WriteInt32(ptr, IntOffset, Unsafe.As<T, int>(ref value));
+                return;
+            }
+        }
+
+        Value = value;
+    }
+
+    /// <summary>The counterpart of <see cref="SetValue{T}"/>: reads without allocating.</summary>
+    public T GetValue<T>() where T : struct
+    {
+        var ptr = _meta.Value;
+        if (_meta.ValueLength == 1 && ptr != IntPtr.Zero)
+        {
+            var type = (OscValueType)Marshal.ReadByte(ptr, TypeOffset);
+            if (typeof(T) == typeof(float) && type == OscValueType.Float)
+            {
+                var f = BitConverter.Int32BitsToSingle(Marshal.ReadInt32(ptr, FloatOffset));
+                return Unsafe.As<float, T>(ref f);
+            }
+
+            if (typeof(T) == typeof(bool) && type == OscValueType.Bool)
+            {
+                var b = Marshal.ReadByte(ptr, BoolOffset) != 0;
+                return Unsafe.As<bool, T>(ref b);
+            }
+
+            if (typeof(T) == typeof(int) && type == OscValueType.Int)
+            {
+                var i = Marshal.ReadInt32(ptr, IntOffset);
+                return Unsafe.As<int, T>(ref i);
+            }
+        }
+
+        return Value is T t ? t : default;
     }
 
     public OscMessage(string address, Type type)
@@ -148,7 +214,29 @@ public class OscMessage
     public async Task<int> Encode(byte[] buffer, CancellationToken ct) => await Task.Run(() => fti_osc.create_osc_message(buffer, ref _meta), ct);
 
     public OscMessage(OscMessageMeta meta) => _meta = meta;
-    
+
+    /// <summary>
+    /// Frees a parsed message's native copy now instead of in the finalizer. Each received
+    /// datagram becomes one of these, and VRChat echoes every parameter change (twice when
+    /// the 518 router forwards it too) - thousands a second. Left to the finalizer, every
+    /// one of them survived its first collection, was promoted, and was only reclaimed by
+    /// the next gen1 or gen2 collection, so the receive path kept the GC busy on its own.
+    /// Call it once the handlers have returned. Value reads null afterwards.
+    /// </summary>
+    public void Release()
+    {
+        if (_metaPtr == IntPtr.Zero)
+        {
+            return;
+        }
+
+        fti_osc.free_osc_message(_metaPtr);
+        _metaPtr = IntPtr.Zero;
+        _meta.Value = IntPtr.Zero;
+        _meta.ValueLength = 0;
+        GC.SuppressFinalize(this);
+    }
+
     ~OscMessage()
     {   
         // If we don't own this memory, then we need to sent it back to rust to free it

@@ -480,20 +480,29 @@ public class TrackingSourceDetector
     {
         try
         {
-            return Process.GetProcesses()
-                .Select(p =>
+            // Dispose every Process: each one is finalizable, and a sweep every 10 s left a
+            // few hundred of them per sweep for the finalizer thread and the GC to clean up.
+            var names = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var p in Process.GetProcesses())
+            {
+                using (p)
                 {
                     try
                     {
-                        return p.ProcessName;
+                        var name = p.ProcessName;
+                        if (!string.IsNullOrEmpty(name))
+                        {
+                            names.Add(name);
+                        }
                     }
                     catch (Exception)
                     {
-                        return string.Empty;
+                        // Exited between the snapshot and the read
                     }
-                })
-                .Where(n => !string.IsNullOrEmpty(n))
-                .ToHashSet(StringComparer.OrdinalIgnoreCase);
+                }
+            }
+
+            return names;
         }
         catch (Exception e)
         {
@@ -691,12 +700,25 @@ public class TrackingSourceDetector
         try
         {
             using var socket = new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp);
-            var connect = socket.BeginConnect(IPAddress.Loopback, 5555, null, null);
-            if (!connect.AsyncWaitHandle.WaitOne(250))
+
+            // Cancel and wait for the connect, never just walk away from it. Windows takes
+            // about 2 s to refuse a loopback connect, so with BrokenEye closed this always
+            // timed out - and BeginConnect + WaitOne then disposed the socket with the
+            // connect still pending. That connect faulted with nobody observing it: the
+            // "[App] Ignored an abandoned socket task from connection teardown" line once
+            // per sweep, ~6 a minute all session.
+            using (var timeout = new CancellationTokenSource(250))
             {
-                return null; // nothing listening (or wedged) - not live either way
+                try
+                {
+                    socket.ConnectAsync(new IPEndPoint(IPAddress.Loopback, 5555), timeout.Token)
+                        .AsTask().GetAwaiter().GetResult();
+                }
+                catch (Exception)
+                {
+                    return null; // refused, timed out or wedged - not live either way
+                }
             }
-            socket.EndConnect(connect);
 
             socket.NoDelay = true;
             socket.ReceiveTimeout = 400;

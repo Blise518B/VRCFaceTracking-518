@@ -138,7 +138,15 @@ public class OscRecvService : BackgroundService
                     continue;
                 }
 
-                OnMessageReceived(newMsg);
+                try
+                {
+                    OnMessageReceived(newMsg);
+                }
+                finally
+                {
+                    // Handlers run synchronously and keep nothing; see OscMessage.Release
+                    newMsg.Release();
+                }
             }
             catch (Exception e)
             {

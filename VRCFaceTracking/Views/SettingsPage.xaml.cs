@@ -111,8 +111,17 @@ public sealed partial class SettingsPage : Page, INotifyPropertyChanged
         InitializeHardwareDebugStream(UnifiedTracking.EyeImageData, ref _upperImageStream, ref _upperStream);
         InitializeHardwareDebugStream(UnifiedTracking.LipImageData, ref _lowerImageStream, ref _lowerStream);
 
-        ViewModel.AutoRestart.RecentEvents.CollectionChanged += (_, _) =>
+        // Attached only while the page shows, like the tracking handler below. RecentEvents
+        // belongs to the singleton AutoRestartService, so the inline += that used to be in
+        // the constructor kept every Settings page ever opened alive - tree, bitmaps and all.
+        _onRestartEventsChanged = (_, _) =>
             PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(HasNoRestartEvents)));
+        Loaded += (_, _) =>
+        {
+            ViewModel.AutoRestart.RecentEvents.CollectionChanged -= _onRestartEventsChanged;
+            ViewModel.AutoRestart.RecentEvents.CollectionChanged += _onRestartEventsChanged;
+        };
+        Unloaded += (_, _) => ViewModel.AutoRestart.RecentEvents.CollectionChanged -= _onRestartEventsChanged;
 
         Loaded += OnPageLoaded;
 
@@ -127,6 +136,7 @@ public sealed partial class SettingsPage : Page, INotifyPropertyChanged
     }
 
     private readonly Action<UnifiedTrackingData> _onUnifiedDataUpdated;
+    private readonly System.Collections.Specialized.NotifyCollectionChangedEventHandler _onRestartEventsChanged;
 
     private void InitializeHardwareDebugStream(VrcftImage image, ref WriteableBitmap bitmap, ref Stream targetStream)
     {

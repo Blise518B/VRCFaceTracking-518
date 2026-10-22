@@ -23,6 +23,9 @@ public sealed partial class MainPage : Page
         NavigationService = App.GetService<INavigationService>();
 
         InitializeComponent();
+
+        Loaded += (_, _) => ViewModel.Start();
+        Unloaded += (_, _) => ViewModel.Stop();
     }
 
     private void NoModuleButton_Click(object sender, RoutedEventArgs e) => NavigationService.NavigateTo(typeof(ModuleRegistryViewModel).FullName!);

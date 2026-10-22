@@ -77,11 +77,14 @@ namespace VRCFaceTracking
             var t0 = System.Diagnostics.Stopwatch.GetTimestamp();
             var mutated = Mutator.MutateData(Data);
             var t1 = System.Diagnostics.Stopwatch.GetTimestamp();
+            var gc1 = GC.GetTotalPauseDuration();
             OnUnifiedDataUpdated.Invoke(mutated);
+            var gc2 = GC.GetTotalPauseDuration();
             var t2 = System.Diagnostics.Stopwatch.GetTimestamp();
 
             Core.Services.PipelineWatch.LastMutateMs = (t1 - t0) * 1000.0 / System.Diagnostics.Stopwatch.Frequency;
             Core.Services.PipelineWatch.LastParamsMs = (t2 - t1) * 1000.0 / System.Diagnostics.Stopwatch.Frequency;
+            Core.Services.PipelineWatch.LastParamsGcMs = (gc2 - gc1).TotalMilliseconds;
             return Task.CompletedTask;
         }
     }
