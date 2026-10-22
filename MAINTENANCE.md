@@ -32,6 +32,10 @@ These are load-bearing. Breaking one produces a symptom that looks like
 6. **`ReplyUpdatePacket`'s wire layout is shared by two processes.** Layout is
    `[4B magic][4B type][4B size][16 header floats][EXPRESSION_COUNT floats]`.
    Both sides ship together, but changing the order breaks tracking silently.
+   The native face tracking blob is the other fixed layout, and VRChat owns that one:
+   `/tracking/face/v1`, exactly 102 bytes (VRChat drops any other size), bytes 14-101 in
+   `UnifiedExpressions` enum order. `FaceTrackingBlob` relies on that order, so the enum
+   never gets an entry inserted or moved.
 7. **No unbounded UI over data that lives all session.** Every live XAML object is
    visited by every garbage collection, and those collections pause the send loop
    too. The Output page once held 5,163 log lines with six behaviours each and made

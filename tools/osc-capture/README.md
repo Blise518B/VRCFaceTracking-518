@@ -17,6 +17,9 @@ It reports, for one recording:
 - **[divergence]** how long VRChat's echoed value differed from what VRCFT last sent.
   Anything at or above 100 ms is a value that got stuck.
 - **[confirmation]** the share of VRCFT's bool changes VRChat echoed back.
+- **[native]** only for an avatar on VRChat's native face tracking: `/tracking/face/v1`
+  blobs per second, their payload sizes (VRChat drops any blob that isn't 102 bytes) and
+  the range of a few keys.
 
 Reference numbers (2026-10-15, Quest Pro over Virtual Desktop, OSCm/Binary avatar):
 
