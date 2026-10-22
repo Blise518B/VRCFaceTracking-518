@@ -54,3 +54,7 @@ obj/
 /VRCFaceTracking.Core/obj/
 
 dist/
+
+# tools/osc-capture recordings and Python caches
+*.pcap
+__pycache__/
