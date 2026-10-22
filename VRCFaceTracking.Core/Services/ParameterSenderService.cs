@@ -3,6 +3,7 @@ using System.Diagnostics;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using VRCFaceTracking.Core.Contracts;
+using VRCFaceTracking.Core.Models.ParameterDefinition;
 using VRCFaceTracking.Core.OSC;
 using VRCFaceTracking.Core.Params.Data;
 
@@ -41,9 +42,10 @@ public class ParameterSenderService : BackgroundService
             if (AllParametersRelevantStatic == value) return;
             AllParametersRelevantStatic = value;
             SendQueue.Clear();
+            var anyAvatar = new NullAvatarDef("Always Relevant", "alwaysrelevant");
             foreach (var parameter in UnifiedTracking.AllParameters)
             {
-                parameter.ResetParam(Array.Empty<IParameterDefinition>());
+                parameter.ResetParam(Array.Empty<IParameterDefinition>(), anyAvatar);
             }
         }
     }

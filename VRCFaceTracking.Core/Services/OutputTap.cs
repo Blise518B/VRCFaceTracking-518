@@ -38,13 +38,7 @@ public static class OutputTap
     public static void Record(OscMessage[] messages, int count)
     {
         var now = Environment.TickCount64;
-
-        if (now - _totalWindowStart >= 1000)
-        {
-            _totalRate = _totalWindowCount;
-            _totalWindowCount = 0;
-            _totalWindowStart = now;
-        }
+        AdvanceTotalWindow(now);
 
         for (var i = 0; i < count; i++)
         {
@@ -55,10 +49,6 @@ public static class OutputTap
                 continue;
             }
 
-            _totalWindowCount++;
-
-            var entry = Entries.GetOrAdd(address, _ => new Entry { WindowStart = now });
-
             // Scalars only, read in place. Going through message.Value marshalled the
             // whole native struct, string pointer included, and a message queued before
             // its first value was written made that pointer garbage: an access violation
@@ -66,25 +56,54 @@ public static class OutputTap
             // message per tick while this page was open.
             var value = message.PeekScalar();
 
-            entry.LastValue = value;
-            entry.TypeName = value switch
+            Touch(address, value, value switch
             {
                 float => "float",
                 bool => "bool",
                 int => "int",
                 null => "?",
                 _ => value.GetType().Name,
-            };
-            entry.LastSentTicks = now;
-            entry.TotalCount++;
-            if (now - entry.WindowStart >= 1000)
-            {
-                entry.Rate = entry.WindowCount;
-                entry.WindowCount = 0;
-                entry.WindowStart = now;
-            }
-            entry.WindowCount++;
+            }, now);
         }
+    }
+
+    /// <summary>
+    /// A datagram encoded without fti_osc (the native face tracking blob). Shown by its size
+    /// in bytes: the page lists single values, and the blob holds 102 of them.
+    /// </summary>
+    public static void RecordRaw(string address, int length)
+    {
+        var now = Environment.TickCount64;
+        AdvanceTotalWindow(now);
+        Touch(address, length, "blob", now);
+    }
+
+    private static void AdvanceTotalWindow(long now)
+    {
+        if (now - _totalWindowStart >= 1000)
+        {
+            _totalRate = _totalWindowCount;
+            _totalWindowCount = 0;
+            _totalWindowStart = now;
+        }
+    }
+
+    private static void Touch(string address, object? value, string typeName, long now)
+    {
+        _totalWindowCount++;
+
+        var entry = Entries.GetOrAdd(address, _ => new Entry { WindowStart = now });
+        entry.LastValue = value;
+        entry.TypeName = typeName;
+        entry.LastSentTicks = now;
+        entry.TotalCount++;
+        if (now - entry.WindowStart >= 1000)
+        {
+            entry.Rate = entry.WindowCount;
+            entry.WindowCount = 0;
+            entry.WindowStart = now;
+        }
+        entry.WindowCount++;
     }
 
     /// <summary>Messages per second across all addresses (completed 1s window).</summary>

@@ -145,6 +145,29 @@ public class OscSendService
         return Task.CompletedTask;
     }
 
+    /// <summary>
+    /// Sends a datagram that is already OSC-encoded (<see cref="FaceTrackingBlob"/>), as its
+    /// own packet next to the fti_osc bundles. Inline like the other sends. Throws what the
+    /// socket throws; the caller runs on the tracking tick and has to catch it.
+    /// </summary>
+    public void SendRaw(byte[] datagram, int length, string address)
+    {
+        var socket = _sendSocket;
+        if (socket is not { Connected: true })
+        {
+            WarnNotConnected();
+            return;
+        }
+
+        if (OutputTap.Enabled)
+        {
+            OutputTap.RecordRaw(address, length);
+        }
+
+        socket.Send(datagram, 0, length, SocketFlags.None);
+        OnMessagesDispatched(1);
+    }
+
     public Task Send(OscMessage[] messages, CancellationToken ct) => Send(messages, messages.Length, ct);
 
     // Reused across ticks so the per-tick LINQ Select().ToArray() allocation is gone.

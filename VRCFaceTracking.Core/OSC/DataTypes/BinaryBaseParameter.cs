@@ -52,17 +52,17 @@ public class BinaryBaseParameter : Parameter
      * binary number since we can safely assume the highest possible input float will be 1.0. Then we bitwise shift by the binary steps discovered in step 2.
      * Finally, we use a combination of bitwise AND to get whether the designated index for this param is 1 or 0.
      */
-    public override Parameter[] ResetParam(IParameterDefinition[] newParams)
+    public override Parameter[] ResetParam(IParameterDefinition[] newParams, IAvatarInfo avatarInfo)
     {
         // Avatar loads reset from more than one thread (native OSC and the 518 router both
         // deliver /avatar/change), and two resets racing here could orphan a bit
         lock (_bits)
         {
-            return ResetBits(newParams);
+            return ResetBits(newParams, avatarInfo);
         }
     }
 
-    private Parameter[] ResetBits(IParameterDefinition[] newParams)
+    private Parameter[] ResetBits(IParameterDefinition[] newParams, IAvatarInfo avatarInfo)
     {
         // Every bit this parameter has ever made, by name. The bits used to be created
         // fresh on every reset and the old ones only dropped from _params - but a relevant
@@ -72,10 +72,13 @@ public class BinaryBaseParameter : Parameter
         // ticks/s and VRChat lost messages in the flood. Bits are reused now, and the
         // ones the new avatar lacks are switched off.
         _params.Clear();
-        var negativeRelevancy = _negativeParam.ResetParam(newParams);
+        var negativeRelevancy = _negativeParam.ResetParam(newParams, avatarInfo);
 
-        var boolParams = newParams.Where(p =>
-            p.Type == typeof(bool) && _regex.IsMatch(p.Address));
+        // A native face tracking avatar takes no bits at all: leaving the set empty switches
+        // every existing bit off below
+        var boolParams = avatarInfo.FullFaceTracking
+            ? Enumerable.Empty<IParameterDefinition>()
+            : newParams.Where(p => p.Type == typeof(bool) && _regex.IsMatch(p.Address));
 
         var paramsToCreate = new Dictionary<string, int>();
         foreach (var param in boolParams)
@@ -114,7 +117,7 @@ public class BinaryBaseParameter : Parameter
                 _bits[name] = bit;
             }
 
-            parameters.AddRange(bit.ResetParam(newParams));
+            parameters.AddRange(bit.ResetParam(newParams, avatarInfo));
             _params.Add(bit);
         }
 

@@ -35,7 +35,14 @@
                             <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Spacing="3" VerticalAlignment="Center">
                                 <TextBlock HorizontalTextAlignment="Right" VerticalAlignment="Center" Foreground="{ThemeResource TextFillColorSecondaryBrush}" x:Name="LegacyParametersCount" Text="0"/>
                                 <TextBlock HorizontalAlignment="Right" VerticalAlignment="Center" Foreground="{ThemeResource TextFillColorSecondaryBrush}" x:Uid="LegacyParameters"/>
-                            </StackPanel> 
+                            </StackPanel>
+                        </StackPanel>
+                        <StackPanel x:Name="NativeFaceTrackingBadge" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,5,0,0" VerticalAlignment="Center" Visibility="Collapsed">
+                            <Ellipse Width="10" Height="10" Fill="{ThemeResource AccentFillColorDefaultBrush}" Margin="0,0,5,0" VerticalAlignment="Center"/>
+                            <TextBlock VerticalAlignment="Center" Foreground="{ThemeResource TextFillColorSecondaryBrush}" Text="Native face tracking"/>
+                            <ToolTipService.ToolTip>
+                                <ToolTip Content="This avatar uses VRChat's own face tracking. VRCFT sends all 102 tracking keys to /tracking/face/v1 and VRChat syncs them, so no v2 parameters are sent."/>
+                            </ToolTipService.ToolTip>
                         </StackPanel>
                     </StackPanel>
                 </Grid>

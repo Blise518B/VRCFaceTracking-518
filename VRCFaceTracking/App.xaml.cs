@@ -145,6 +145,7 @@ public partial class App : Application
             services.AddSingleton<OscSendService>();
             services.AddSingleton<OscRecvService>();
             services.AddSingleton<ParameterSenderService>();
+            services.AddSingleton<NativeFaceTrackingSender>();
             services.AddSingleton<UnifiedTrackingMutator>();
             services.AddSingleton<AutoRestartService>();
             services.AddSingleton<CrashReportService>();
@@ -188,6 +189,7 @@ public partial class App : Application
             
             services.AddHostedService<ParameterSenderService>(provider => provider.GetService<ParameterSenderService>());
             services.AddHostedService<OscRecvService>(provider => provider.GetService<OscRecvService>());
+            services.AddHostedService<NativeFaceTrackingSender>(provider => provider.GetService<NativeFaceTrackingSender>());
 
             // Configuration
             services.Configure<LocalSettingsOptions>(context.Configuration.GetSection(nameof(LocalSettingsOptions)));
