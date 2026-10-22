@@ -41,6 +41,15 @@ These are load-bearing. Breaking one produces a symptom that looks like
 8. **A module process must never be left without an update pump.** It kills itself
    after 60 s of silence and the supervisor reads that as a crash. A module that
    initializes nothing goes on standby (`UnifiedLibManager.PutOnStandby`).
+9. **A parameter that is dropped must be switched off, not just forgotten.** A
+   relevant `BaseParam` is subscribed to the static `OnUnifiedDataUpdated`, which keeps
+   it alive and sending every tick. `BinaryBaseParameter` once recreated its bits on
+   every reset and dropped the old ones, and after a day each bit went out 108 times a
+   tick. Reuse child parameters, or call `Deactivate()` on the ones you let go.
+10. **Values are sent on change, so a lost datagram must be repaired by a re-send.**
+   VRChat does drop OSC messages. `ParameterSenderService.ResendUnchanged` re-sends
+   settled values (100 ms after settling, then about once a second); don't remove it
+   to save traffic without measuring confirmation rates first.
 
 ---
 

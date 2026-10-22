@@ -19,7 +19,29 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added
+- **Lost parameter values repair themselves.** VRCFT only sends a value when it changes,
+  so a message VRChat drops left that parameter wrong until it happened to change again -
+  an eyelid stuck half-closed after a blink, or an expression's sign bit wrong for
+  seconds. A value that has settled is now sent once more 100 ms later, and unchanged
+  values are refreshed about once a second (spread across ticks, ~135 messages/s for a
+  fully still face). VRChat ignores values it already has, so nothing extra is synced
+  over the network. `/vrcft/settings/resendUnchanged` (bool) switches it at runtime.
+  Measured A/B after the leak fix below, one minute each: without it two values stayed
+  wrong for 275 and 355 ms; with it nothing stayed wrong for 100 ms or more.
+
 ### Fixed
+- **Binary-encoded parameters multiplied with every avatar load, until the face
+  stuttered and stuck.** Each load created a new set of bit parameters and dropped the
+  old set without unsubscribing it, so every set ever made kept computing and sending
+  each tick. Two resets run per avatar load: after a day of 54 loads, every bit of an
+  OSCm/Binary avatar went out 108 times per tick, 16,000 messages a second. The send
+  loop slowed from 97 to 57 ticks/s with gaps up to 90 ms, and VRChat failed to confirm
+  about a quarter of the messages that were not duplicated - one sign bit stayed wrong
+  for 8 s. Bits are now reused across loads and the ones a new avatar lacks are switched
+  off; resets are serialized, since native OSC and the 518 router both trigger them.
+  Measured live afterwards: 1,454 messages/s, and VRChat confirms 99.8% of changes.
+  `tools/osc-capture` records and checks this without touching VRChat's port.
 - **Starting iFacialMocap mid-session restarted tracking three times.** Bringing the
   phone up while VRCFT was already running (desktop mode) got its module started within
   ten seconds, then torn down and started twice more, with two tracking blackouts in
