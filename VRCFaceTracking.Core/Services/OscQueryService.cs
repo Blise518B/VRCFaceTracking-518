@@ -128,6 +128,14 @@ public partial class OscQueryService(
                 }
 
                 break;
+            case "/vrcft/settings/resendUnchanged":   // A/B switch for the lost-message repair, see BaseParam
+                if (msg.Value is bool resend)
+                {
+                    ParameterSenderService.ResendUnchanged = resend;
+                    logger.LogInformation("Re-sending unchanged parameter values: {state}", resend ? "on" : "off");
+                }
+
+                break;
             /*
             case "/avatar/parameters/EyeTrackingActive":
                 if (UnifiedLibManager.EyeStatus != ModuleState.Uninitialized)

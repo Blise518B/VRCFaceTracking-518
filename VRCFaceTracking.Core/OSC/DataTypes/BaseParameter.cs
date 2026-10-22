@@ -55,21 +55,46 @@ public class BaseParam<T> : Parameter where T : struct
 
     private T? _lastValue;
 
+    /// <summary>A value that just settled is sent once more after this long, so the end of a
+    /// blink is repaired within a tenth of a second if its datagram was lost.</summary>
+    private const long SettleResendMs = 100;
+
+    /// <summary>Background refresh of every unchanged value. Each parameter gets its own
+    /// offset so the idle refreshes spread out instead of landing in one tick.</summary>
+    private const long RefreshMs = 1000;
+    private readonly long _refreshJitterMs = Random.Shared.Next(0, 250);
+    private long _resendAtMs;
+
     public T ParamValue
     {
         get => (T)OscMessage.Value;
         set
         {
+            var now = Environment.TickCount64;
             if (value.Equals(_lastValue))
             {
+                if (ParameterSenderService.ResendUnchanged && now >= _resendAtMs)
+                {
+                    _resendAtMs = now + RefreshMs + _refreshJitterMs;
+                    Enqueue();
+                }
+
                 return;
             }
 
             OscMessage.Value = value;
             _lastValue = value;
+            _resendAtMs = now + SettleResendMs;
             Enqueue();
         }
     }
+
+    /// <summary>
+    /// Stops this parameter until a later ResetParam makes it relevant again.
+    /// For owners that drop a child parameter: one that stays relevant stays subscribed to
+    /// the static update event, and keeps sending every tick with nothing to stop it.
+    /// </summary>
+    internal void Deactivate() => Relevant = false;
 
     private void Enqueue() => ParameterSenderService.Enqueue(OscMessage);
 

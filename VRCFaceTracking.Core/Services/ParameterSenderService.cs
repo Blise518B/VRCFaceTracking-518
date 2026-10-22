@@ -22,6 +22,17 @@ public class ParameterSenderService : BackgroundService
     {
         get; set;
     }
+
+    /// <summary>
+    /// Re-send parameter values that stopped changing (see BaseParam.ParamValue), so a
+    /// datagram VRChat drops can't leave a parameter stuck. Values are only sent on change,
+    /// and VRChat does lose messages: a capture on 2026-10-15 showed about a quarter of the
+    /// binary "Negative" flags never confirmed, one of them wrong for 8 s until the value
+    /// happened to change again. An unchanged value costs a datagram and nothing else:
+    /// VRChat ignores a value it already has, so nothing extra goes over the network.
+    /// Switched at runtime with /vrcft/settings/resendUnchanged (bool).
+    /// </summary>
+    public static bool ResendUnchanged { get; set; } = true;
     public bool AllParametersRelevant
     {
         get => AllParametersRelevantStatic;

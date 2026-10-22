@@ -9,6 +9,7 @@ namespace VRCFaceTracking.Core.OSC.DataTypes;
 public class BinaryBaseParameter : Parameter
 {
     private readonly List<BaseParam<bool>> _params = new(); // Int represents binary steps
+    private readonly Dictionary<string, BaseParam<bool>> _bits = new();
 
     private readonly BaseParam<bool> _negativeParam;
     private int _maxPossibleBinaryInt;
@@ -53,6 +54,23 @@ public class BinaryBaseParameter : Parameter
      */
     public override Parameter[] ResetParam(IParameterDefinition[] newParams)
     {
+        // Avatar loads reset from more than one thread (native OSC and the 518 router both
+        // deliver /avatar/change), and two resets racing here could orphan a bit
+        lock (_bits)
+        {
+            return ResetBits(newParams);
+        }
+    }
+
+    private Parameter[] ResetBits(IParameterDefinition[] newParams)
+    {
+        // Every bit this parameter has ever made, by name. The bits used to be created
+        // fresh on every reset and the old ones only dropped from _params - but a relevant
+        // bit is subscribed to the static update event, so the dropped ones lived on and
+        // kept sending. Two resets run per avatar load, so after 54 loads each bit went
+        // out 108 times per tick (16,000 messages/s), the send loop slowed from 97 to 57
+        // ticks/s and VRChat lost messages in the flood. Bits are reused now, and the
+        // ones the new avatar lacks are switched off.
         _params.Clear();
         var negativeRelevancy = _negativeParam.ResetParam(newParams);
 
@@ -73,17 +91,31 @@ public class BinaryBaseParameter : Parameter
                 paramsToCreate.Add(_paramName + index, binaryIndex.Value);
         }
 
+        foreach (var (name, bit) in _bits)
+        {
+            if (!paramsToCreate.ContainsKey(name))
+            {
+                bit.Deactivate();
+            }
+        }
+
         if (paramsToCreate.Count == 0) return negativeRelevancy;
 
         // Calculate the highest possible binary number
         _maxPossibleBinaryInt = (int)Math.Pow(2, paramsToCreate.Values.Count);
         var parameters = new List<Parameter>(negativeRelevancy);
-        foreach (var newBool in paramsToCreate
-                     .Select(param =>
-                         new BaseParam<bool>(param.Key, data => ProcessBinary(data, param.Value), true)))
+        foreach (var (name, binaryIndex) in paramsToCreate)
         {
-            parameters.AddRange(newBool.ResetParam(newParams));
-            _params.Add(newBool);
+            // A name always maps to the same shift (it is derived from the number in it),
+            // so a reused bit's value function is still the right one
+            if (!_bits.TryGetValue(name, out var bit))
+            {
+                bit = new BaseParam<bool>(name, data => ProcessBinary(data, binaryIndex), true);
+                _bits[name] = bit;
+            }
+
+            parameters.AddRange(bit.ResetParam(newParams));
+            _params.Add(bit);
         }
 
         return parameters.ToArray();
