@@ -81,7 +81,10 @@ public class TrackingCompatibility : TrackingMutation
         }
 
         var n = moduleName.ToLowerInvariant();
-        if (n.Contains("virtual desktop") || n.Contains("questpro") || n.Contains("quest pro"))
+        // The Steam Link module names itself "SteamLink" and already folds the lid
+        // tightener into openness (1 - closed - closed * tightener), like any Quest Pro source.
+        if (n.Contains("virtual desktop") || n.Contains("questpro") || n.Contains("quest pro") ||
+            n.Contains("steamlink") || n.Contains("steam link"))
         {
             return "questpro";
         }

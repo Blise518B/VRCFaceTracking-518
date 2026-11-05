@@ -259,6 +259,44 @@ public class OpenVRService
         }
     }
 
+    /// <summary>
+    /// Name of the SteamVR driver that registered the active headset - "vrlink" for
+    /// Steam Link, "oculus_virtualdesktop" for Virtual Desktop, "aapvr" for a Pimax -
+    /// or null when SteamVR is not up or no HMD is connected. Read from the registered
+    /// device type, which SteamVR builds as "driver/serial". Unlike the tracking-system
+    /// name in <see cref="GetHmdIdentity"/>, which drivers choose freely (Steam Link
+    /// and Virtual Desktop can both report a Quest as "oculus"), this names the
+    /// software actually streaming to the headset.
+    /// </summary>
+    public string? GetHmdDriver()
+    {
+        var system = _system;
+        if (!IsInitialized || system == null)
+        {
+            return null;
+        }
+
+        try
+        {
+            var sb = new System.Text.StringBuilder(256);
+            var err = ETrackedPropertyError.TrackedProp_Success;
+            system.GetStringTrackedDeviceProperty(OpenVR.k_unTrackedDeviceIndex_Hmd,
+                ETrackedDeviceProperty.Prop_RegisteredDeviceType_String, sb, 256, ref err);
+            if (err != ETrackedPropertyError.TrackedProp_Success || sb.Length == 0)
+            {
+                return null;
+            }
+
+            var registered = sb.ToString();
+            var slash = registered.IndexOf('/');
+            return slash > 0 ? registered[..slash] : registered;
+        }
+        catch (Exception)
+        {
+            return null;
+        }
+    }
+
     public bool AutoStart
     {
         get => IsInitialized && OpenVR.Applications.GetApplicationAutoLaunch(AppKey);

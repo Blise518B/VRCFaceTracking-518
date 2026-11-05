@@ -44,6 +44,21 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   summary, so a 152 ms stall could report 214 ms of GC.
 
 ### Fixed
+- **Steam Link is recognised as Steam Link, not as "SteamVR is running".** The Steam Link
+  source only checked for `vrserver`, which runs on Virtual Desktop days too. With a Steam
+  Link module installed, taking the headset off on Virtual Desktop paused its face data,
+  the Steam Link module looked like the better match, and the hot-swap replaced Virtual
+  Desktop with a module that had nothing to receive. It swapped back once the headset was
+  on again, with 20-40 s without tracking each way. Steam Link now counts only while
+  SteamVR's headset comes from Steam Link's own driver (`vrlink`; Virtual Desktop's is
+  `oculus_virtualdesktop`). Switching between the two still swaps modules by itself, about
+  20-30 s after the new headset appears. The lite build has no SteamVR connection, so there
+  the Steam Link module needs Always. The "Active headset changed" log line now names the
+  driver.
+- **The Quest Pro compatibility profile took Steam Link for other hardware.** The Steam
+  Link module calls itself "SteamLink", which wasn't on the Quest Pro list, so the profile
+  coupled squint into eye openness a second time and closed the lids too far. Steam Link
+  counts as Quest Pro now, like Virtual Desktop.
 - **Tracking hitched every minute, and after about 20 minutes froze for a quarter of a
   second about once a minute.** Every one of these hitches was the garbage collector
   pausing the whole app, and four things kept it busy:

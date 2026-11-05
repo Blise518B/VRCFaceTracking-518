@@ -176,9 +176,20 @@ matching modules — so if you're on Virtual Desktop, the ETVR module doesn't st
 
 Detection uses read-only OS queries: running process names, memory-mapped files and named
 pipes. Nothing is opened exclusively, so probing can never take a device from the module that
-needs it. Known sources: Virtual Desktop, ALVR, Steam Link/SteamVR, Meta/Oculus Link,
+needs it. Known sources: Virtual Desktop, ALVR, Steam Link, Meta/Oculus Link,
 SRanipal (Vive), EyeTrackVR, Project Babble, Varjo, Pimax, Tobii, and a "simulated" entry that
 never auto-detects.
+
+Two Quest Pro sources need more than a process name, because both run through SteamVR:
+**Virtual Desktop** counts while its face data in `VirtualDesktop.BodyState` is changing, and
+**Steam Link** counts while SteamVR's headset was registered by Steam Link's driver (`vrlink`,
+read from the HMD's registered device type; Virtual Desktop's driver is
+`oculus_virtualdesktop`). SteamVR merely running is not evidence for Steam Link: as weak
+evidence it won whenever Virtual Desktop's data paused, and the hot-swap flipped modules every
+time the headset came off. The driver comes from the app's OpenVR connection
+(`TrackingSourceDetector.HmdDriverResolver`); the lite build has none, so there the Steam Link
+module needs **Always**. Steam Link itself needs SteamVR → Steam Link: Enable OSC, eye and face
+sharing, and OSC output port 9015, where the Steam Link module listens.
 
 Each module can be set to **Auto** (follow detection), **Always** or **Never**, and every
 decision comes with a readable reason shown in the UI and written to the log — a silent skip
@@ -186,9 +197,9 @@ would be indistinguishable from a bug. Two deliberate design rules:
 
 - **Unrecognised modules still start.** A module we have no mapping for might be brand-new
   hardware; refusing to start it would look like the app is broken.
-- **Shared VR runtimes lose to specific sources.** `vrserver` and `OVRServer_x64` run for *any*
-  headset, so they're marked as weak evidence. If something specific is streaming (Virtual
-  Desktop's streamer plus its shared memory, say) then modules backed only by a generic runtime
+- **Shared VR runtimes lose to specific sources.** `OVRServer_x64` runs whenever the Meta
+  software is installed, so it's marked as weak evidence. If something specific is streaming
+  (Virtual Desktop's live face data, say) then modules backed only by a generic runtime
   are skipped. With nothing specific anywhere, a generic runtime is accepted rather than leaving
   you with no tracking at all.
 

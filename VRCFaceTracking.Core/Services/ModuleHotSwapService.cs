@@ -176,7 +176,17 @@ public class ModuleHotSwapService : IDisposable
             return; // SteamVR went away; nothing to launch for that.
         }
 
-        _logger?.LogInformation("Active headset changed: {old} -> {new}", previous ?? "none", hmd);
+        string? driver = null;
+        try
+        {
+            driver = TrackingSourceDetector.HmdDriverResolver?.Invoke();
+        }
+        catch (Exception)
+        {
+            // Only for the log line
+        }
+        _logger?.LogInformation("Active headset changed: {old} -> {new} (SteamVR driver {driver})",
+            previous ?? "none", hmd, driver ?? "unknown");
         _companions.LaunchConfiguredAtStartup();
     }
 

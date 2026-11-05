@@ -280,6 +280,19 @@ public partial class App : Application
                 return null;
             }
         };
+        // Steam Link is told apart from Virtual Desktop by the driver behind the headset;
+        // the identity above can read the same for both.
+        TrackingSourceDetector.HmdDriverResolver = () =>
+        {
+            try
+            {
+                return GetService<OpenVRService>().GetHmdDriver();
+            }
+            catch (Exception)
+            {
+                return null;
+            }
+        };
         var companions = App.GetService<CompanionAppService>();
         await companions.InitializeAsync();
         companions.LaunchConfiguredAtStartup();

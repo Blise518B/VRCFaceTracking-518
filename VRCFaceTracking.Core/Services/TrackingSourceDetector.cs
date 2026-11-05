@@ -28,6 +28,15 @@ public class TrackingSourceDetector
     public const string EtvrSourceName = "EyeTrackVR (ETVR)";
     public const string BrokenEyeSourceName = "BrokenEye (Dream Air Tobii bridge)";
     public const string BabbleSourceName = "Project Babble";
+    public const string SteamLinkSourceName = "Steam Link";
+
+    /// <summary>
+    /// Name of the SteamVR driver that registered the active headset ("vrlink",
+    /// "oculus_virtualdesktop", "aapvr"), or null while SteamVR is down or has no
+    /// headset. Set by the app, which owns the OpenVR connection; a host without
+    /// one (the lite build) leaves it null, and Steam Link is never detected there.
+    /// </summary>
+    public static Func<string?>? HmdDriverResolver;
 
     /// <summary>A thing that can feed tracking data, and how to recognise it.</summary>
     public sealed class TrackingSource
@@ -119,12 +128,21 @@ public class TrackingSourceDetector
         },
         new()
         {
-            Name = "Steam Link / SteamVR face tracking",
+            Name = SteamLinkSourceName,
             ModuleKeywords = new[] { "steamlink", "steamvr", "questpro", "metaquest" },
-            Processes = new[] { "vrserver", "steamlink", "vrmonitor" },
-            GenericRuntime = true,
-            Notes = "Face tracking delivered through SteamVR itself. SteamVR runs for any headset, "
-                  + "so this only counts when nothing more specific is streaming.",
+            // Not process-based: vrserver runs for every SteamVR headset, Virtual
+            // Desktop included. As weak evidence that started the Steam Link module
+            // whenever VD's face data paused (headset off), the hot-swap then tore VD
+            // down for a module with nothing to receive, and swapped back once the
+            // headset was on again. The tracking-system name isn't safe either: VD
+            // reports "oculus", and Steam Link's driver carries per-headset profiles
+            // with their own trackingSystemName, "oculus" among them. The driver that
+            // registered the headset tells them apart: "vrlink" for Steam Link,
+            // "oculus_virtualdesktop" for VD (SteamVR's LastKnown.ActualHMDDriver).
+            CustomProbe = ProbeSteamLinkHeadset,
+            Notes = "Quest Pro face and eye tracking over Steam Link. Detected when SteamVR's headset "
+                  + "comes from Steam Link's own driver (vrlink); SteamVR merely running doesn't count. "
+                  + "Needs SteamVR > Steam Link: Enable OSC, eye and face sharing, OSC output port 9015.",
         },
         new()
         {
@@ -603,6 +621,29 @@ public class TrackingSourceDetector
     private static long _beProbeAt;
     private static string? _beProbeResult;
     private const int ProbeCacheMs = 5000;
+
+    /// <summary>
+    /// True while SteamVR's headset was registered by Steam Link's driver. One
+    /// property read over the OpenVR connection, so no cache: the verdict follows
+    /// the headset as soon as SteamVR does. It doesn't depend on face data flowing,
+    /// so a paused stream (headset off) never makes Steam Link look gone or present.
+    /// </summary>
+    private static string? ProbeSteamLinkHeadset()
+    {
+        string? driver;
+        try
+        {
+            driver = HmdDriverResolver?.Invoke();
+        }
+        catch (Exception)
+        {
+            return null;
+        }
+
+        return string.Equals(driver, "vrlink", StringComparison.OrdinalIgnoreCase)
+            ? "SteamVR headset driven by Steam Link (vrlink)"
+            : null;
+    }
 
     /// <summary>
     /// Reads the validity flags inside VirtualDesktop.BodyState (offsets from
