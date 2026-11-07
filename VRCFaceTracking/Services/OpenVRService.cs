@@ -21,6 +21,7 @@ public class OpenVRService
 
     public bool Initialize()
     {
+        ForgetDriverNames();
         EVRInitError error = EVRInitError.None;
         _system = OpenVR.Init(ref error, EVRApplicationType.VRApplication_Background);
 
@@ -209,6 +210,7 @@ public class OpenVRService
     {
         IsInitialized = false;
         _system = null;
+        ForgetDriverNames();
         try
         {
             OpenVR.Shutdown();
@@ -259,14 +261,19 @@ public class OpenVRService
         }
     }
 
+    // Driver handle -> driver name. Handles only mean something within one SteamVR
+    // run, so the map is dropped on every connect and disconnect.
+    private readonly Dictionary<ulong, string> _driverNames = new();
+    private readonly object _driverNamesLock = new();
+
     /// <summary>
-    /// Name of the SteamVR driver that registered the active headset - "vrlink" for
-    /// Steam Link, "oculus_virtualdesktop" for Virtual Desktop, "aapvr" for a Pimax -
-    /// or null when SteamVR is not up or no HMD is connected. Read from the registered
-    /// device type, which SteamVR builds as "driver/serial". Unlike the tracking-system
-    /// name in <see cref="GetHmdIdentity"/>, which drivers choose freely (Steam Link
-    /// and Virtual Desktop can both report a Quest as "oculus"), this names the
-    /// software actually streaming to the headset.
+    /// Name of the SteamVR driver that created the active headset - "vrlink" for Steam
+    /// Link - or null when SteamVR is not up, no HMD is connected or the driver can't be
+    /// named. Read from the HMD's parent driver handle, resolved through SteamVR's driver
+    /// list. Everything a driver reports about its headset can be dressed up instead:
+    /// measured live on a Quest Pro over Steam Link, the tracking system was "oculus" and
+    /// even the registered device type was "oculus/VRLINKHMDQUESTPRO", while the parent
+    /// driver was vrlink.
     /// </summary>
     public string? GetHmdDriver()
     {
@@ -278,22 +285,57 @@ public class OpenVRService
 
         try
         {
-            var sb = new System.Text.StringBuilder(256);
             var err = ETrackedPropertyError.TrackedProp_Success;
-            system.GetStringTrackedDeviceProperty(OpenVR.k_unTrackedDeviceIndex_Hmd,
-                ETrackedDeviceProperty.Prop_RegisteredDeviceType_String, sb, 256, ref err);
-            if (err != ETrackedPropertyError.TrackedProp_Success || sb.Length == 0)
+            var parent = system.GetUint64TrackedDeviceProperty(OpenVR.k_unTrackedDeviceIndex_Hmd,
+                ETrackedDeviceProperty.Prop_ParentDriver_Uint64, ref err);
+            if (err != ETrackedPropertyError.TrackedProp_Success || parent == 0)
             {
                 return null;
             }
 
-            var registered = sb.ToString();
-            var slash = registered.IndexOf('/');
-            return slash > 0 ? registered[..slash] : registered;
+            lock (_driverNamesLock)
+            {
+                if (_driverNames.TryGetValue(parent, out var known))
+                {
+                    return known;
+                }
+
+                var initError = EVRInitError.None;
+                var pointer = OpenVR.GetGenericInterface("FnTable:" + OpenVR.IVRDriverManager_Version, ref initError);
+                if (pointer == IntPtr.Zero)
+                {
+                    return null;
+                }
+
+                var drivers = new CVRDriverManager(pointer);
+                var sb = new System.Text.StringBuilder(256);
+                var count = drivers.GetDriverCount();
+                for (uint i = 0; i < count; i++)
+                {
+                    sb.Clear();
+                    drivers.GetDriverName(i, sb, 256);
+                    var name = sb.ToString();
+                    if (name.Length > 0 && drivers.GetDriverHandle(name) == parent)
+                    {
+                        _driverNames[parent] = name;
+                        return name;
+                    }
+                }
+            }
+
+            return null;
         }
         catch (Exception)
         {
             return null;
+        }
+    }
+
+    private void ForgetDriverNames()
+    {
+        lock (_driverNamesLock)
+        {
+            _driverNames.Clear();
         }
     }
 

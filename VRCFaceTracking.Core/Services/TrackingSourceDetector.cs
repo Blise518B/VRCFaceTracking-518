@@ -31,9 +31,8 @@ public class TrackingSourceDetector
     public const string SteamLinkSourceName = "Steam Link";
 
     /// <summary>
-    /// Name of the SteamVR driver that registered the active headset ("vrlink",
-    /// "oculus_virtualdesktop", "aapvr"), or null while SteamVR is down or has no
-    /// headset. Set by the app, which owns the OpenVR connection; a host without
+    /// Name of the SteamVR driver that created the active headset ("vrlink" for Steam
+    /// Link), or null while SteamVR is down or has no headset. Set by the app, which owns the OpenVR connection; a host without
     /// one (the lite build) leaves it null, and Steam Link is never detected there.
     /// </summary>
     public static Func<string?>? HmdDriverResolver;
@@ -134,11 +133,11 @@ public class TrackingSourceDetector
             // Desktop included. As weak evidence that started the Steam Link module
             // whenever VD's face data paused (headset off), the hot-swap then tore VD
             // down for a module with nothing to receive, and swapped back once the
-            // headset was on again. The tracking-system name isn't safe either: VD
-            // reports "oculus", and Steam Link's driver carries per-headset profiles
-            // with their own trackingSystemName, "oculus" among them. The driver that
-            // registered the headset tells them apart: "vrlink" for Steam Link,
-            // "oculus_virtualdesktop" for VD (SteamVR's LastKnown.ActualHMDDriver).
+            // headset was on again. What the headset reports about itself can't tell
+            // them apart either: over Steam Link a Quest Pro shows tracking system
+            // "oculus" and registered device type "oculus/VRLINKHMDQUESTPRO" (measured
+            // live 2026-11-07), as Oculus-looking as VD's. The driver that created the
+            // headset does: its parent driver is "vrlink" only on Steam Link.
             CustomProbe = ProbeSteamLinkHeadset,
             Notes = "Quest Pro face and eye tracking over Steam Link. Detected when SteamVR's headset "
                   + "comes from Steam Link's own driver (vrlink); SteamVR merely running doesn't count. "

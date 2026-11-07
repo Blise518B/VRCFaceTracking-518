@@ -182,9 +182,11 @@ never auto-detects.
 
 Two Quest Pro sources need more than a process name, because both run through SteamVR:
 **Virtual Desktop** counts while its face data in `VirtualDesktop.BodyState` is changing, and
-**Steam Link** counts while SteamVR's headset was registered by Steam Link's driver (`vrlink`,
-read from the HMD's registered device type; Virtual Desktop's driver is
-`oculus_virtualdesktop`). SteamVR merely running is not evidence for Steam Link: as weak
+**Steam Link** counts while SteamVR's headset was created by Steam Link's driver, `vrlink`.
+That comes from the HMD's `Prop_ParentDriver_Uint64`, named through SteamVR's driver list.
+Nothing the headset reports about itself works: over Steam Link a Quest Pro has manufacturer
+"Oculus", tracking system "oculus" and registered device type "oculus/VRLINKHMDQUESTPRO"
+(measured 2026-11-07). SteamVR merely running is not evidence for Steam Link: as weak
 evidence it won whenever Virtual Desktop's data paused, and the hot-swap flipped modules every
 time the headset came off. The driver comes from the app's OpenVR connection
 (`TrackingSourceDetector.HmdDriverResolver`); the lite build has none, so there the Steam Link

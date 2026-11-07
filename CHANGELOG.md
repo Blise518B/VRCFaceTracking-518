@@ -50,8 +50,10 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   the Steam Link module looked like the better match, and the hot-swap replaced Virtual
   Desktop with a module that had nothing to receive. It swapped back once the headset was
   on again, with 20-40 s without tracking each way. Steam Link now counts only while
-  SteamVR's headset comes from Steam Link's own driver (`vrlink`; Virtual Desktop's is
-  `oculus_virtualdesktop`). Switching between the two still swaps modules by itself, about
+  SteamVR's headset was created by Steam Link's own driver, `vrlink`, read from the
+  headset's parent driver. Everything the headset reports about itself says "oculus" over
+  Steam Link too, registered device type included, so none of that can tell it apart from
+  Virtual Desktop. Switching between the two still swaps modules by itself, about
   20-30 s after the new headset appears. The lite build has no SteamVR connection, so there
   the Steam Link module needs Always. The "Active headset changed" log line now names the
   driver.
