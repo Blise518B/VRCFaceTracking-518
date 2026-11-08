@@ -58,3 +58,7 @@ dist/
 # tools/osc-capture recordings and Python caches
 *.pcap
 __pycache__/
+
+# Python bytecode
+__pycache__/
+*.pyc

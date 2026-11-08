@@ -1,6 +1,12 @@
-# Packages the current Release build into a shareable, version-stamped zip + exe under dist\
+﻿# Packages the current Release build into the two release files under dist\:
+#   VRCFaceTracking-518-Windows.exe  one file that unpacks and starts itself
+#   VRCFaceTracking-518-Windows.zip  the portable folder, also what the in-app updater installs
+# The names never carry a version: the README's download button points at
+# releases/latest/download/<name>, and the updater looks for the zip by name.
+# GitHub Actions runs this for every build (.github/workflows/build.yml); locally it works the same.
 $ErrorActionPreference = "Stop"
 $root = $PSScriptRoot
+$ci = $env:GITHUB_ACTIONS -eq "true"
 $src = Join-Path $root "VRCFaceTracking\bin\x64\Release\net10.0-windows10.0.22621.0\win-x64"
 
 # Version comes from Directory.Build.props so there is exactly one place to bump it.
@@ -16,12 +22,12 @@ $version = $version.Trim()
 $upstream = if ($upstream) { $upstream.Trim() } else { "unknown" }
 
 # The STAGING folder and intermediate zip keep fixed names: the bundle project embeds
-# the zip by path, and VRCFaceTracking.Bundle extracts by the folder name inside it.
-# Only the artifacts people download get the version in their filename.
+# the zip by path, and VRCFaceTracking.Bundle and the in-app updater both expect the app
+# in a folder of this name inside it.
 $dst = Join-Path $root "dist\VRCFaceTracking-518-Edition"
 $zip = Join-Path $root "dist\VRCFaceTracking-518-Edition.zip"
-$releaseZip = Join-Path $root "dist\VRCFaceTracking-518-Edition-v$version.zip"
-$releaseExe = Join-Path $root "dist\VRCFaceTracking-518-Edition-v$version.exe"
+$releaseZip = Join-Path $root "dist\VRCFaceTracking-518-Windows.zip"
+$releaseExe = Join-Path $root "dist\VRCFaceTracking-518-Windows.exe"
 
 Write-Host "Packaging 518 Edition v$version (based on upstream $upstream)" -ForegroundColor Cyan
 
@@ -55,10 +61,10 @@ VRCFaceTracking - 518 Edition
 v$version  (based on upstream VRCFaceTracking $upstream)
 ====================================
 
-UNOFFICIAL BUILD. This is a personal fork, not the official VRCFaceTracking and not
+UNOFFICIAL BUILD. This is a fork, not the official VRCFaceTracking, and it is not
 affiliated with or supported by its developers. Please do NOT report problems with this
-build to the VRCFaceTracking project, its GitHub or its Discord - report them to whoever
-gave you this file.
+build to the VRCFaceTracking project, its GitHub or its Discord - report them here:
+https://github.com/Blise518B/VRCFaceTracking-518/issues
 
 Custom build of VRCFaceTracking (https://github.com/benaclejames/VRCFaceTracking, Apache 2.0)
 with these additions:
@@ -93,10 +99,13 @@ LOOK AND EXTRAS
  - Neon518 theme matching VRC Parameter Relay
  - Lite Console: switch the running session to a tiny console monitor and back
  - OSC Fallback Standard client for when VRChat's own discovery stops seeing us
+ - Updates itself: a banner says when there is a new release, one click installs it
+   (Settings -> Updates)
 
 HOW TO RUN
 ----------
-1. Unzip this folder anywhere (e.g. Documents). Don't run it from inside the zip!
+1. Unzip this folder somewhere you can write to (e.g. Documents). Don't run it from
+   inside the zip, and avoid Program Files - the app can't update itself there.
 2. Run VRCFaceTracking.exe
 3. If Windows SmartScreen complains ("Windows protected your PC"):
    click "More info" -> "Run anyway". That happens because this build isn't code-signed.
@@ -105,9 +114,18 @@ Your existing VRCFaceTracking settings and modules are picked up automatically
 (they live in %APPDATA%\VRCFaceTracking, not in the app folder), so this build
 sits alongside a normal install rather than replacing it.
 
-Not code-signed, not affiliated with the upstream project - report problems here,
-not to the VRCFaceTracking developers.
+Not code-signed, not affiliated with the upstream project - report problems at the
+link above, not to the VRCFaceTracking developers.
 "@ | Set-Content (Join-Path $dst "README.txt") -Encoding utf8
+
+# Marks this folder as a packaged release. The in-app updater only ever replaces a folder
+# that carries this file, so it can never overwrite a build from source in bin\.
+[ordered]@{
+    version  = $version
+    upstream = $upstream
+    repo     = "Blise518B/VRCFaceTracking-518"
+    asset    = "VRCFaceTracking-518-Windows.zip"
+} | ConvertTo-Json | Set-Content (Join-Path $dst "518-release.json") -Encoding utf8
 
 # Fail loudly rather than shipping a build that carries the author's identity.
 $leaks = Get-ChildItem $dst -Recurse -File | Where-Object {
@@ -132,7 +150,7 @@ $bundleOut = Join-Path $root "dist\bundle-out"
 dotnet publish (Join-Path $root "VRCFaceTracking.Bundle\VRCFaceTracking.Bundle.csproj") -c Release -r win-x64 -o $bundleOut -v q --nologo
 if ($LASTEXITCODE -ne 0) {
     Write-Host "Bundle build failed - the zip above is still usable." -ForegroundColor Red
-    explorer /select,$zip
+    if (-not $ci) { explorer /select,$zip }
     exit 1
 }
 Copy-Item (Join-Path $bundleOut "VRCFaceTracking-518-Edition.exe") $releaseExe -Force
@@ -145,9 +163,11 @@ Move-Item $zip $releaseZip -Force
 Write-Host ""
 Write-Host ("518 Edition v{0} ready:" -f $version) -ForegroundColor Green
 Write-Host ("  {0} ({1:N1} MB)   <- single file, unpacks and starts itself" -f (Split-Path $releaseExe -Leaf), ((Get-Item $releaseExe).Length / 1MB))
-Write-Host ("  {0} ({1:N1} MB)   <- plain zip, for people who prefer it" -f (Split-Path $releaseZip -Leaf), ((Get-Item $releaseZip).Length / 1MB))
-Write-Host ""
-Write-Host "Both are named with the version, so they can go straight onto a GitHub release."
-Write-Host "To cut the next one: bump <Fork518Version> in Directory.Build.props, rebuild, re-run this."
-Write-Host "Older versions stay in dist\ - delete them by hand when you no longer need them."
-explorer /select,$releaseExe
+Write-Host ("  {0} ({1:N1} MB)   <- portable zip, also what the in-app updater installs" -f (Split-Path $releaseZip -Leaf), ((Get-Item $releaseZip).Length / 1MB))
+if (-not $ci) {
+    Write-Host ""
+    Write-Host "Releases are built by GitHub: bump <Fork518Version> in Directory.Build.props, add the"
+    Write-Host "CHANGELOG section, push, then push the tag 518-vX.Y.Z (see CHANGELOG.md)."
+    Write-Host "These local files are for sharing a test build by hand."
+    explorer /select,$releaseExe
+}

@@ -4,6 +4,7 @@ using Microsoft.UI.Xaml.Input;
 using Microsoft.UI.Xaml.Media;
 
 using VRCFaceTracking.Contracts.Services;
+using VRCFaceTracking.Core.Services.Updates;
 using VRCFaceTracking.Helpers;
 using VRCFaceTracking.ViewModels;
 
@@ -19,9 +20,32 @@ public sealed partial class ShellPage : Page
         get;
     }
 
+    /// <summary>Drives the update banner above every page.</summary>
+    public UpdateService Updates
+    {
+        get;
+    }
+
+    public InfoBarSeverity SeverityFor(UpdateBannerKind kind) => kind switch
+    {
+        UpdateBannerKind.Success => InfoBarSeverity.Success,
+        UpdateBannerKind.Error => InfoBarSeverity.Error,
+        _ => InfoBarSeverity.Informational,
+    };
+
+    private async void UpdateNow_Click(object sender, RoutedEventArgs e) => await UpdateInstaller.UpdateNowAsync();
+
+    private async void WhatsNew_Click(object sender, RoutedEventArgs e) =>
+        await Launcher.LaunchUriAsync(new Uri(Updates.Latest?.PageUrl ?? Updates.ReleasesPage));
+
+    private void SkipVersion_Click(object sender, RoutedEventArgs e) => Updates.SkipLatest();
+
+    private void UpdateBanner_CloseButtonClick(InfoBar sender, object args) => Updates.DismissBanner();
+
     public ShellPage(ShellViewModel viewModel)
     {
         ViewModel = viewModel;
+        Updates = App.GetService<UpdateService>();
         InitializeComponent();
 
         ViewModel.NavigationService.Frame = NavigationFrame;

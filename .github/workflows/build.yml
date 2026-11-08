@@ -1,0 +1,110 @@
+# Builds VRCFaceTracking 518 Edition on GitHub.
+#
+# Every push and pull request: build + package; both files are kept as a workflow
+# artifact for 14 days, so any commit can be tried without a release.
+#
+# A pushed tag 518-vX.Y.Z: the same, then a GitHub release with both files attached and
+# the matching CHANGELOG.md section as its notes. The tag must equal <Fork518Version> in
+# Directory.Build.props, and CHANGELOG.md needs a "## [X.Y.Z]" section, or nothing is
+# published. The file names never carry a version: the README's download button and
+# the in-app updater find them under releases/latest by name.
+name: Build
+
+on:
+  push:
+    branches: ['**']
+    tags: ['518-v*']
+    paths-ignore: ['**.md', 'docs/**']
+  pull_request:
+    paths-ignore: ['**.md', 'docs/**']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: build-${{ github.ref }}
+  cancel-in-progress: ${{ !startsWith(github.ref, 'refs/tags/') }}
+
+jobs:
+  build:
+    name: Build (Windows x64)
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Read version
+        id: version
+        shell: pwsh
+        run: |
+          $props = [xml](Get-Content Directory.Build.props)
+          $version = (($props.Project.PropertyGroup.Fork518Version | Where-Object { $_ }) -as [string]).Trim()
+          "version=$version" >> $env:GITHUB_OUTPUT
+          Write-Host "518 Edition v$version"
+          if ($env:GITHUB_REF_TYPE -eq 'tag' -and $env:GITHUB_REF_NAME -ne "518-v$version") {
+            Write-Error "Tag $env:GITHUB_REF_NAME doesn't match Fork518Version $version in Directory.Build.props (expected 518-v$version)."
+            exit 1
+          }
+
+      - name: Build
+        run: dotnet build VRCFaceTracking.sln -c Release -p:Platform=x64 -p:WindowsPackageType=None
+
+      - name: Package
+        shell: pwsh
+        run: ./package.ps1
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: VRCFaceTracking-518-v${{ steps.version.outputs.version }}-build${{ github.run_number }}
+          path: |
+            dist/VRCFaceTracking-518-Windows.exe
+            dist/VRCFaceTracking-518-Windows.zip
+          retention-days: 14
+          if-no-files-found: error
+
+      - name: Release notes
+        if: github.ref_type == 'tag'
+        shell: pwsh
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          $lines = Get-Content CHANGELOG.md -Encoding utf8
+          $heading = $lines | Select-String -Pattern ('^## \[' + [regex]::Escape($env:VERSION) + '\]') | Select-Object -First 1
+          if (-not $heading) {
+            Write-Error "CHANGELOG.md has no '## [$env:VERSION]' section."
+            exit 1
+          }
+          $section = for ($i = $heading.LineNumber; $i -lt $lines.Count; $i++) {
+            if ($lines[$i] -match '^## \[') { break }
+            if ($lines[$i] -notmatch '^---\s*$') { $lines[$i] }
+          }
+          $base = "https://github.com/$env:GITHUB_REPOSITORY/releases/download/$env:GITHUB_REF_NAME"
+          $header = @(
+            "**[Download VRCFaceTracking-518-Windows.exe]($base/VRCFaceTracking-518-Windows.exe)**: one file, unpacks itself and starts. Prefer a folder? The [portable zip]($base/VRCFaceTracking-518-Windows.zip).",
+            "",
+            "Already on 518 Edition 1.2.0 or newer? The app offers this update by itself: a banner at the top, or Settings > Updates.",
+            "",
+            "Windows may say it protected your PC, because the build isn't code-signed: click **More info**, then **Run anyway**.",
+            ""
+          )
+          ($header + $section) -join "`n" | Set-Content release-notes.md -Encoding utf8
+          Get-Content release-notes.md
+
+      - name: Publish release
+        if: github.ref_type == 'tag'
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ steps.version.outputs.version }}
+        run: >
+          gh release create $env:GITHUB_REF_NAME
+          dist/VRCFaceTracking-518-Windows.exe
+          dist/VRCFaceTracking-518-Windows.zip
+          --title "VRCFaceTracking 518 Edition v$env:VERSION"
+          --notes-file release-notes.md
+          --verify-tag
+          --latest

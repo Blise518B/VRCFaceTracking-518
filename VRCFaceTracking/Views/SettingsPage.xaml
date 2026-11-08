@@ -257,7 +257,43 @@
 
                 <!--  About  -->
                 <TextBlock Style="{StaticResource SettingsSectionHeaderTextBlockStyle}" x:Uid="About" />
-                
+
+                <labs:SettingsExpander Header="Updates"
+                                       Description="{x:Bind Updates.StatusText, Mode=OneWay}">
+                    <labs:SettingsExpander.HeaderIcon>
+                        <FontIcon Glyph="&#xE895;" Foreground="{StaticResource Cat518Green}" />
+                    </labs:SettingsExpander.HeaderIcon>
+                    <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                        <ProgressBar Width="120"
+                                     VerticalAlignment="Center"
+                                     Maximum="100"
+                                     Value="{x:Bind Updates.DownloadProgress, Mode=OneWay}"
+                                     Visibility="{x:Bind Updates.ShowProgress, Mode=OneWay}"/>
+                        <Button Style="{StaticResource AccentButtonStyle}"
+                                Content="{x:Bind Updates.InstallButtonText, Mode=OneWay}"
+                                Visibility="{x:Bind Updates.CanInstall, Mode=OneWay}"
+                                Click="UpdateNow_OnClick"/>
+                        <Button Content="Check now"
+                                IsEnabled="{x:Bind Updates.CanCheck, Mode=OneWay}"
+                                Click="CheckForUpdates_OnClick"/>
+                    </StackPanel>
+                    <labs:SettingsExpander.Items>
+                        <labs:SettingsCard Header="Check for updates when VRCFaceTracking starts"
+                                           Description="Asks GitHub once per start whether there is a newer release. Nothing installs until you click Update.">
+                            <ToggleSwitch IsOn="{x:Bind Updates.CheckOnStartup, Mode=TwoWay}"/>
+                        </labs:SettingsCard>
+                        <labs:SettingsCard Header="This install"
+                                           Description="{x:Bind UpdateInstallText}"/>
+                        <labs:SettingsCard Header="All releases and what changed"
+                                           IsClickEnabled="True"
+                                           Click="ReleasesCard_OnClick">
+                            <labs:SettingsCard.ActionIcon>
+                                <FontIcon Glyph="&#xE8A7;" />
+                            </labs:SettingsCard.ActionIcon>
+                        </labs:SettingsCard>
+                    </labs:SettingsExpander.Items>
+                </labs:SettingsExpander>
+
                 <labs:SettingsExpander x:Uid="Copyright" Header="VRCFaceTracking">
                     <TextBlock
                             Margin="0,-2,0,0"
@@ -277,7 +313,7 @@
                             <TextBlock
                                     Foreground="{ThemeResource TextFillColorSecondaryBrush}"
                                     IsTextSelectionEnabled="True"
-                                    Text="git clone https://github.com/benaclejames/VRCFaceTracking" />
+                                    Text="git clone https://github.com/Blise518B/VRCFaceTracking-518" />
                         </labs:SettingsCard>
                         <labs:SettingsCard
                                 x:Uid="BugRequestCard"

@@ -143,7 +143,39 @@
                 </behaviors:NavigationViewHeaderBehavior>
             </i:Interaction.Behaviors>
             <Grid Margin="{StaticResource NavigationViewPageContentMargin}">
-                <Frame x:Name="NavigationFrame" />
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="*"/>
+                </Grid.RowDefinitions>
+                <!-- Update banner (518 fork): shows above every page, so a new release is
+                     seen without visiting Settings. Collapses to nothing when closed. -->
+                <InfoBar Grid.Row="0"
+                         Margin="0,0,0,12"
+                         IsOpen="{x:Bind Updates.ShowBanner, Mode=OneWay}"
+                         Severity="{x:Bind SeverityFor(Updates.BannerKind), Mode=OneWay}"
+                         Title="{x:Bind Updates.BannerTitle, Mode=OneWay}"
+                         Message="{x:Bind Updates.BannerMessage, Mode=OneWay}"
+                         IsClosable="True"
+                         CloseButtonClick="UpdateBanner_CloseButtonClick">
+                    <InfoBar.Content>
+                        <StackPanel Margin="0,0,0,12" Spacing="8">
+                            <ProgressBar Value="{x:Bind Updates.DownloadProgress, Mode=OneWay}"
+                                         Maximum="100"
+                                         Visibility="{x:Bind Updates.ShowProgress, Mode=OneWay}"/>
+                            <StackPanel Orientation="Horizontal"
+                                        Spacing="8"
+                                        Visibility="{x:Bind Updates.ShowBannerButtons, Mode=OneWay}">
+                                <Button Style="{StaticResource AccentButtonStyle}"
+                                        Content="{x:Bind Updates.InstallButtonText, Mode=OneWay}"
+                                        IsEnabled="{x:Bind Updates.CanInstall, Mode=OneWay}"
+                                        Click="UpdateNow_Click"/>
+                                <Button Content="What's new" Click="WhatsNew_Click"/>
+                                <Button Content="Skip this version" Click="SkipVersion_Click"/>
+                            </StackPanel>
+                        </StackPanel>
+                    </InfoBar.Content>
+                </InfoBar>
+                <Frame Grid.Row="1" x:Name="NavigationFrame" />
             </Grid>
         </NavigationView>
     </Grid>

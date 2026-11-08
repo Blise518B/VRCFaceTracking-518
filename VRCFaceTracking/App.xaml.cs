@@ -19,6 +19,7 @@ using VRCFaceTracking.Core.OSC.Query.mDNS;
 using VRCFaceTracking.Core.Params.Data;
 using VRCFaceTracking.Core.Params.Data.Mutation;
 using VRCFaceTracking.Core.Services;
+using VRCFaceTracking.Core.Services.Updates;
 using VRCFaceTracking.Models;
 using VRCFaceTracking.Services;
 using VRCFaceTracking.ViewModels;
@@ -154,6 +155,7 @@ public partial class App : Application
             services.AddSingleton<ModuleHotSwapService>();
             services.AddSingleton<CompanionAppService>();
             services.AddSingleton<OscRouterClient>();
+            services.AddSingleton<UpdateService>();
             services.AddTransient<GithubService>();
 
             // Views and ViewModels
@@ -347,8 +349,23 @@ public partial class App : Application
         // stage breakdown) land in latest.log instead of vanishing.
         PipelineWatch.Logger = GetService<ILoggerFactory>().CreateLogger("PipelineWatch");
 
+        // Before the shell exists, so the banner can report how an update the previous
+        // session started went
+        var updates = App.GetService<UpdateService>();
+        try
+        {
+            await updates.InitializeAsync();
+        }
+        catch (Exception e)
+        {
+            _logger?.LogWarning("Update settings could not be loaded: {message}", e.Message);
+        }
+
         await App.GetService<IActivationService>().ActivateAsync(args);
         await Host.StartAsync();
+
+        // Once per start, after startup has settled; never installs by itself
+        _ = updates.StartupCheckAsync();
     }
 
     /// <summary>

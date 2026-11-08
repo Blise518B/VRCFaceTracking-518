@@ -11,6 +11,7 @@ using VRCFaceTracking.Core.Contracts;
 using VRCFaceTracking.Core.Contracts.Services;
 using VRCFaceTracking.Core.Params.Data;
 using VRCFaceTracking.Core.Services;
+using VRCFaceTracking.Core.Services.Updates;
 using VRCFaceTracking.Helpers;
 using VrcftImage = VRCFaceTracking.Core.Types.Image;
 
@@ -104,6 +105,7 @@ public sealed partial class SettingsPage : Page, INotifyPropertyChanged
     public SettingsPage()
     {
         ViewModel = App.GetService<SettingsViewModel>();
+        Updates = App.GetService<UpdateService>();
         RiskySettingsViewModel = App.GetService<RiskySettingsViewModel>();
         OscTarget = App.GetService<IOscTarget>();
 
@@ -241,11 +243,30 @@ public sealed partial class SettingsPage : Page, INotifyPropertyChanged
         _launchModeReady = true;
     }
 
+    // This build's bugs go to this fork, never to upstream: they didn't write the fork's
+    // code and have asked not to get its reports.
     private async void bugRequestCard_Click(object sender, RoutedEventArgs e)
-    => await Launcher.LaunchUriAsync(new Uri("https://github.com/benaclejames/VRCFaceTracking/issues/new/choose"));
-    
-    private async void privacyPolicyCard_Click(object sender, RoutedEventArgs e) 
-     => await Launcher.LaunchUriAsync(new Uri("https://github.com/benaclejames/VRCFaceTracking/blob/master/PRIVACY.md"));
+    => await Launcher.LaunchUriAsync(new Uri(ReleaseUpdater.IssuesPage));
+
+    private async void privacyPolicyCard_Click(object sender, RoutedEventArgs e)
+     => await Launcher.LaunchUriAsync(new Uri($"https://github.com/{ReleaseUpdater.Repository}/blob/master/PRIVACY.md"));
+
+    public UpdateService Updates
+    {
+        get;
+    }
+
+    /// <summary>Where this copy lives and whether it can replace itself, for the Updates card.</summary>
+    public string UpdateInstallText => Updates.CanSelfUpdate
+        ? $"v{Updates.CurrentVersion} in {ReleaseUpdater.InstallDirectory}. Updates install into this folder by themselves."
+        : $"v{Updates.CurrentVersion} in {ReleaseUpdater.InstallDirectory}. {Updates.SelfUpdateBlocker}";
+
+    private async void UpdateNow_OnClick(object sender, RoutedEventArgs e) => await UpdateInstaller.UpdateNowAsync();
+
+    private async void CheckForUpdates_OnClick(object sender, RoutedEventArgs e) => await Updates.CheckAsync(userInitiated: true);
+
+    private async void ReleasesCard_OnClick(object sender, RoutedEventArgs e)
+        => await Launcher.LaunchUriAsync(new Uri(Updates.ReleasesPage));
 
     private void themeMode_SelectionChanged(object sender, RoutedEventArgs e)
     {

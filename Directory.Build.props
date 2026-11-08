@@ -13,7 +13,7 @@
     <!-- THIS FORK'S RELEASE NUMBER - the only line to change when cutting a release.
          It names the .exe and .zip that package.ps1 produces, shows on the Settings
          page, goes into every crash report, and is logged at startup. -->
-    <Fork518Version>1.1.0</Fork518Version>
+    <Fork518Version>1.2.0</Fork518Version>
 
     <Version>$(Fork518Version)</Version>
     <FileVersion>$(Fork518Version).0</FileVersion>
