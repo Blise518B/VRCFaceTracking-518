@@ -1,6 +1,10 @@
 # VRCFaceTracking-518
 
-Private fork of [VRCFaceTracking](https://github.com/benaclejames/VRCFaceTracking) (Apache 2.0) with three additions:
+Public fork of [VRCFaceTracking](https://github.com/benaclejames/VRCFaceTracking) (Apache 2.0),
+released as **VRCFaceTracking 518 Edition** at <https://github.com/Blise518B/VRCFaceTracking-518>.
+These notes explain each addition and why it looks the way it does; README.md is the
+user-facing summary and CHANGELOG.md says what changed in each release. It started with
+three additions:
 
 1. **Module crash auto-restart** — dead tracking module processes are respawned automatically.
 2. **App crash watchdog** — if VRCFaceTracking itself crashes, it relaunches itself.
@@ -368,6 +372,58 @@ PR #393.
 
 ---
 
+## 10. Updates and releases
+
+`VRCFaceTracking.Core/Services/Updates/` (`ReleaseUpdater.cs` does the work, `UpdateService.cs`
+is what the UI binds to), `Helpers/UpdateInstaller.cs`, the banner in `ShellPage.xaml`, the
+Updates card in `SettingsPage.xaml`, and `.github/workflows/build.yml`.
+
+**Releases are built by GitHub.** The Build workflow builds and packages every push (files
+attached to the run for 14 days). A pushed `518-vX.Y.Z` tag publishes a release, after
+checking the tag equals `<Fork518Version>` and CHANGELOG.md has a `## [X.Y.Z]` section, which
+becomes the release notes. The steps are at the top of CHANGELOG.md. Asset names never carry
+a version (`VRCFaceTracking-518-Windows.exe` / `.zip`): the README links to
+`releases/latest/download/<name>` and the updater picks the zip by name. Upstream's Steam
+publish workflow was removed: it needs upstream's Crowdin and Steam secrets and failed on
+every push here.
+
+**The updater** checks `releases/latest` once per start, 15 s after launch (drafts and
+pre-releases never count). A newer version shows a banner above every page; nothing
+installs without a click, because an update restarts the app and tracking must not drop out
+mid-session over a release. **Update now**:
+
+1. downloads `VRCFaceTracking-518-Windows.zip` to `%TEMP%\VRCFaceTracking-518-update\<version>\`,
+   checking the size and the SHA-256 digest the GitHub API lists for the asset;
+2. unpacks it and checks it contains `VRCFaceTracking.exe` and a `518-release.json` naming
+   the version the release tag names;
+3. saves `UpdatePendingVersion`, starts `apply-update.ps1` hidden, then shuts down like the
+   lite hand-off: watchdog off first (it would otherwise relaunch the old version as a
+   "crash"), clean teardown, crash marker cleared, exit code 0;
+4. the script waits for the app, then for anything else running from the install folder
+   (module processes, watchdog, lite; stopped after 20 s), backs up every file the new
+   version replaces, `robocopy /E`s the new files over the folder (never `/MIR`: a portable
+   folder may share a directory with the user's own files), restores the backup if robocopy
+   fails, starts the app and deletes the work folder. It logs to
+   `%APPDATA%\VRCFaceTracking\update.log`;
+5. the next start compares its version with `UpdatePendingVersion` and says in the banner
+   whether the update installed.
+
+Only a folder with `518-release.json` (written by `package.ps1`) replaces itself, so a build
+from source in `bin\` is never overwritten; neither is a folder it can't write to (Program
+Files) or a drive root. Those get the release page instead. The one-file exe unpacks to
+`%LOCALAPPDATA%\VRCFaceTracking-518\app\`, which carries the marker, so it updates in place
+too; running an older one-file exe afterwards still starts the updated app, because its
+payload hash matches the `installed.txt` it wrote.
+
+Tested with a console harness (local HTTP server, the real release zip): version parsing,
+asset picking, wrong-digest and truncated downloads rejected and deleted, the helper waiting
+for its parent, an unrelated file in the install folder kept, a path with a space, a quote and
+non-ASCII letters, and a file locked for writing making robocopy fail and the backup come
+back. The real path from one published release to the next can only be tried once a second
+release exists.
+
+---
+
 ## Building
 
 Requires .NET 10 SDK on Windows.
@@ -386,5 +442,5 @@ git fetch upstream
 git merge upstream/master
 ```
 
-`origin` is the private fork (`Blise518B/VRCFaceTracking-518`), `upstream` is
+`origin` is this fork (`Blise518B/VRCFaceTracking-518`, public since 2026-11-08), `upstream` is
 `benaclejames/VRCFaceTracking`.

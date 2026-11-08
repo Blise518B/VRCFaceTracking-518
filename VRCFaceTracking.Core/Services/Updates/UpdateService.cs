@@ -268,9 +268,25 @@ public partial class UpdateService : ObservableObject
     /// </summary>
     public async Task<bool> DownloadAsync()
     {
-        if (!CanSelfUpdate || Latest?.Zip is not { } zip || State != UpdateState.Available)
+        if (!CanSelfUpdate || Latest == null || State != UpdateState.Available)
         {
             return State == UpdateState.ReadyToInstall;
+        }
+
+        if (Latest.Zip is not { } zip)
+        {
+            // The release appears before CI has attached its files; ask GitHub again first,
+            // the files may well be there by now
+            State = UpdateState.Idle;
+            await CheckAsync(userInitiated: false);
+            if (Latest?.Zip is not { } fresh || State != UpdateState.Available)
+            {
+                ShowMessage(UpdateBannerKind.Error, "The download isn't ready yet",
+                    "GitHub is still attaching the files to this release. Try again in a few minutes.", offerUpdate: true);
+                return false;
+            }
+
+            zip = fresh;
         }
 
         var version = Latest.Version;

@@ -1,32 +1,18 @@
-﻿# VRCFaceTracking Privacy Policy
+﻿# Privacy: VRCFaceTracking 518 Edition
 
-At VRCFaceTracking, we take your privacy seriously. This privacy policy explains how we collect, use, and protect the information you provide when using our VRCFaceTracking application.
+This build collects nothing and sends no telemetry. Upstream VRCFaceTracking reports errors to Sentry; this fork removed that, so no crash, error or usage data leaves your PC. Crash reports are written to `Documents\VRCFaceTracking\crashes\` and stay there unless you send one to someone yourself.
 
-## Information Collection and Use
-We do not actively collect or store any personal user data within our application. However, we use a third-party error tracking service called Sentry to help diagnose and fix issues that may arise.
+## What it connects to
 
-### Sentry Data Collection
-Sentry automatically collects and transmits certain data to its servers for error diagnosis and basic usage analytics purposes. The types of data that may be collected and sent to Sentry include:
+- **GitHub, for updates.** Once per start the app asks `api.github.com` for this fork's newest release (Settings → Updates switches this off). When you click Update, it downloads the release file from GitHub. These requests carry the app's version in the user agent and nothing else.
+- **GitHub, for the credits.** Settings → Credits loads the list of upstream VRCFaceTracking contributors from `api.github.com`.
+- **The module registry.** The Module Registry page and module updates use `registry.vrcft.io`, run by the VRCFaceTracking project, exactly as in the official app.
+- **VRChat, on your PC or network.** OSC, OSCQuery and mDNS traffic to VRChat, as in the official app.
 
-- **Error Data**: Details about errors or exceptions that occur in the application, such as stack traces, error messages, and environment information.
-- **Application Data**: Information about the application itself, such as the version, environment variables, and other metadata.
-- **Network Data**: In rare cases, when a DNS parsing error occurs, the packet that caused the error may be sent to Sentry for diagnosis. This packet may contain data about your local network, such as device names, but no sensitive data beyond that.
-- **Avatar Parameter Data**: In some cases, when a parsing error related to avatar parameters occurs, data about the avatar parameters may be sent to Sentry for diagnosis purposes.
+Tracking modules are separate programs written by their own authors. What they connect to is up to them.
 
-Sentry does not collect any personal or identifiable user data from our application. However, please review Sentry's [Privacy Policy](https://sentry.io/privacy/) for more information on how they handle the data they receive.
+## The official app
 
-**Note**: The collection of network and avatar parameter data is a temporary measure to help diagnose and resolve early issues with our application. As these issues are addressed, we plan to update this privacy policy to remove the collection of such data.
+The official VRCFaceTracking's privacy policy is [in its repository](https://github.com/benaclejames/VRCFaceTracking/blob/master/PRIVACY.md). It describes the official app, not this build.
 
-## Data Use
-Any data collected by Sentry is used solely for the purpose of error diagnosis, fixing bugs, and improving the performance and stability of our VRCFaceTracking application. We do not share or sell this data with any third parties for marketing or advertising purposes.
-
-## Data Security
-We take reasonable measures to protect the data collected by Sentry from unauthorized access, alteration, or destruction. However, no method of transmission over the internet or electronic storage is 100% secure.
-
-## Changes to This Privacy Policy
-We may update this privacy policy from time to time. We encourage you to review this policy periodically for any changes.
-
-## Contact Us
-If you have any questions or concerns about this privacy policy, please contact us at benaclejames@gmail.com.
-
-Last updated: 10th April 2024
+Questions about this build: [open an issue](https://github.com/Blise518B/VRCFaceTracking-518/issues).

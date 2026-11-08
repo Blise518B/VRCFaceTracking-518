@@ -458,7 +458,10 @@ public static class ReleaseUpdater
             {
                 UseShellExecute = false,
                 CreateNoWindow = true,
-                WorkingDirectory = workDir,
+                // Not the work folder: a process's current directory can't be deleted, and
+                // the helper deletes the work folder when it is done (a Set-Location in the
+                // script would move PowerShell's location, not the process's directory)
+                WorkingDirectory = Path.GetTempPath(),
             };
             foreach (var arg in new[]
                      {
@@ -611,7 +614,6 @@ public static class ReleaseUpdater
             Write-Log "Started $Relaunch"
         }
 
-        Set-Location -LiteralPath $env:TEMP
         Remove-Item -LiteralPath $WorkDir -Recurse -Force -ErrorAction SilentlyContinue
         """;
 }

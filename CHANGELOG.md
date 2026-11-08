@@ -6,20 +6,46 @@ version, which is recorded per release as the base it was built from.
 
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
-**Cutting a release**
-1. Bump `<Fork518Version>` in `Directory.Build.props` and add a section here.
-2. Rebuild (`build.bat`), then run `package.ps1` — it refuses to package a build whose
-   stamped version disagrees with the props file.
-3. Tag as **`518-vX.Y.Z`**, not `vX.Y.Z`. This repo inherited upstream's tags
-   (`v1.0` … `v4.0.0`), so an unprefixed fork tag would collide with an existing
-   upstream one the moment the fork reaches 1.1.1, 1.2.0 or 2.0.0.
-4. Attach both version-stamped files from `dist\` to the GitHub release.
+**Cutting a release** (GitHub builds it; nothing is uploaded by hand)
+1. Bump `<Fork518Version>` in `Directory.Build.props` and turn `[Unreleased]` below into
+   `## [X.Y.Z] - date`. That section becomes the release notes word for word.
+2. Commit and push `master`. The Build workflow builds every push, so check it went green.
+3. Tag and push the tag: `git tag 518-vX.Y.Z` then `git push origin 518-vX.Y.Z`.
+   GitHub Actions builds again, checks the tag matches `<Fork518Version>` and that this
+   file has the section, then publishes the release with `VRCFaceTracking-518-Windows.exe`
+   and `VRCFaceTracking-518-Windows.zip`. Running copies offer it within one start.
+4. Use **`518-vX.Y.Z`**, not `vX.Y.Z`. The local clone carries upstream's tags
+   (`v1.0` … `v4.0.0`), so an unprefixed fork tag would collide with an upstream one.
+   Push only the one tag, never `git push --tags`: that would publish all of upstream's.
+
+The two file names never change: the README's download button points at
+`releases/latest/download/…`, and the in-app updater looks for the zip by name.
+`package.ps1` makes the same two files locally for a test build.
 
 ---
 
 ## [Unreleased]
 
+## [1.2.0] - 2026-11-08
+
+First public release.
+
 ### Added
+- **Updates itself.** The app checks GitHub once per start for a newer release and shows a
+  banner above every page when there is one. **Update now** downloads the portable zip,
+  checks its size and the SHA-256 GitHub lists for it, unpacks it, closes the app, copies
+  the new version over the old one and starts it again - a few seconds without tracking,
+  and only when you click. A hidden helper does the copy: it waits for the app and
+  anything else running from its folder to close, backs up every file it replaces and puts
+  them back if the copy fails, and logs to `%APPDATA%\VRCFaceTracking\update.log`. The next
+  start says whether the update installed. **Skip this version** keeps a release quiet.
+  Settings → Updates has the same button, **Check now**, and the switch for the startup
+  check. Only packaged builds (with `518-release.json`) replace themselves; a build from
+  source, or a copy in a folder it can't write to, opens the download page instead.
+- **GitHub builds the releases.** Every push is built and packaged by GitHub Actions; a
+  pushed `518-vX.Y.Z` tag publishes the release. The files are now called
+  `VRCFaceTracking-518-Windows.exe` and `VRCFaceTracking-518-Windows.zip`, without a
+  version, so links to the newest release never go stale.
 - **VRChat native face tracking (open beta).** Avatars uploaded with "Use All Tracking
   Keys" get the whole face from one `/tracking/face/v1` message per tick - all 102 Unified
   Expressions keys, eyes and pupils included - and VRChat syncs it itself, so no synced
@@ -42,6 +68,12 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   by generation with their total pause and the heap size. The stall warning's "GC paused"
   figure now covers that tick only. It used to add up every pause since the last stall or
   summary, so a 152 ms stall could report 214 ms of GC.
+
+### Changed
+- **Bug reports go to this fork.** Settings → About's bug report, privacy policy and clone
+  links pointed at upstream VRCFaceTracking, whose developers didn't write this build's
+  code. They point at this repository now, and PRIVACY.md describes this build: no
+  telemetry, and which few requests it makes.
 
 ### Fixed
 - **Steam Link is recognised as Steam Link, not as "SteamVR is running".** The Steam Link
