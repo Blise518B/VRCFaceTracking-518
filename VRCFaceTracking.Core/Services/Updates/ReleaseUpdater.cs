@@ -562,12 +562,15 @@ public static class ReleaseUpdater
         Wait-Process -Id $ParentPid -Timeout 120 -ErrorAction SilentlyContinue
 
         # Module processes, the crash watchdog or the lite console can hold files in the
-        # install folder open for a moment after the app itself is gone.
-        $prefix = $Target + '\'
+        # install folder open for a moment after the app itself is gone. Only this app's own
+        # executables directly in the install folder count: a portable copy unzipped into a
+        # shared folder must never take other programs down with it.
         $busy = @()
         $deadline = (Get-Date).AddSeconds(20)
         do {
-            $busy = @(Get-Process -ErrorAction SilentlyContinue | Where-Object { $_.Path -and $_.Path.StartsWith($prefix, [StringComparison]::OrdinalIgnoreCase) })
+            $busy = @(Get-Process -Name 'VRCFaceTracking*' -ErrorAction SilentlyContinue | Where-Object {
+                $_.Path -and [string]::Equals([IO.Path]::GetDirectoryName($_.Path), $Target, [StringComparison]::OrdinalIgnoreCase)
+            })
             if ($busy.Count -eq 0) { break }
             Start-Sleep -Milliseconds 500
         } while ((Get-Date) -lt $deadline)
