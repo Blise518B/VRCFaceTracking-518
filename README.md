@@ -9,6 +9,8 @@ An unofficial fork of [VRCFaceTracking](https://github.com/benaclejames/VRCFaceT
   <sub><a href="https://github.com/Blise518B/VRCFaceTracking-518/releases/latest/download/VRCFaceTracking-518-Windows.zip">Portable zip</a> · every version on the <a href="https://github.com/Blise518B/VRCFaceTracking-518/releases">Releases</a> page</sub>
 </p>
 
+![The Sources page: Virtual Desktop detected as the live source, the other sources idle, each with the reason](docs/images/sources-page.png)
+
 > **Not the official VRCFaceTracking.** This fork is not affiliated with or supported by the VRCFaceTracking developers. Please report problems with it [here](https://github.com/Blise518B/VRCFaceTracking-518/issues), never to the VRCFaceTracking project, its GitHub or its Discord.
 
 ## What it adds
