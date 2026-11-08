@@ -59,7 +59,7 @@ public partial class UpdateService : ObservableObject
     private string _pendingVersion = "";
 
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(IsBusy), nameof(CanCheck), nameof(CanInstall), nameof(ShowProgress), nameof(InstallButtonText))]
+    [NotifyPropertyChangedFor(nameof(IsBusy), nameof(CanCheck), nameof(CanSkip), nameof(CanInstall), nameof(ShowProgress), nameof(InstallButtonText))]
     private UpdateState _state = UpdateState.Idle;
 
     [ObservableProperty]
@@ -120,6 +120,9 @@ public partial class UpdateService : ObservableObject
     public bool IsBusy => State is UpdateState.Checking or UpdateState.Downloading or UpdateState.Installing;
 
     public bool CanCheck => !IsBusy;
+
+    /// <summary>Skipping mid-download would be ignored: the download still installs when it finishes.</summary>
+    public bool CanSkip => !IsBusy;
 
     public bool ShowProgress => State == UpdateState.Downloading;
 
@@ -374,6 +377,11 @@ public partial class UpdateService : ObservableObject
     /// <summary>Hides the banner and keeps quiet about this version on later starts.</summary>
     public void SkipLatest()
     {
+        if (!CanSkip)
+        {
+            return;
+        }
+
         if (Latest != null)
         {
             SkippedVersion = Latest.Version;

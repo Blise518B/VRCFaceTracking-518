@@ -170,7 +170,9 @@
                                         IsEnabled="{x:Bind Updates.CanInstall, Mode=OneWay}"
                                         Click="UpdateNow_Click"/>
                                 <Button Content="What's new" Click="WhatsNew_Click"/>
-                                <Button Content="Skip this version" Click="SkipVersion_Click"/>
+                                <Button Content="Skip this version"
+                                        IsEnabled="{x:Bind Updates.CanSkip, Mode=OneWay}"
+                                        Click="SkipVersion_Click"/>
                             </StackPanel>
                         </StackPanel>
                     </InfoBar.Content>
