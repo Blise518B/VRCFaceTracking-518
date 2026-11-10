@@ -36,6 +36,16 @@ public partial class MulticastDnsService : ObservableObject
     private readonly ConcurrentDictionary<IPAddress, long> _lastErrorLog = new();
     private const long ErrorLogIntervalMs = 60_000;
 
+    // A second VRChat record only replaces the endpoint in use once that endpoint stops
+    // answering over HTTP (see ConsiderOtherClientAsync). One check at a time, and each
+    // record is checked at most every RecheckRecordMs, however often it is announced.
+    private static readonly TimeSpan OscQueryProbeTimeout = TimeSpan.FromSeconds(2);
+    private const long RecheckRecordMs = 5_000;
+    private static readonly HttpClient OscQueryProbe = new(new SocketsHttpHandler { UseProxy = false });
+    private readonly object _clientCheckLock = new();
+    private readonly Dictionary<IPEndPoint, long> _clientCheckedAt = new();
+    private bool _clientCheckRunning;
+
     public Action OnVrcClientDiscovered = () => { };
 
     [ObservableProperty] private IPEndPoint _vrchatClientEndpoint;
@@ -430,8 +440,107 @@ public partial class MulticastDnsService : ObservableObject
             hostAddress = remoteEndpoint.Address;
         }
 
-        VrchatClientEndpoint = new IPEndPoint(hostAddress, vrChatClientPort.Port);
-        OnVrcClientDiscovered();
+        var endpoint = new IPEndPoint(hostAddress, vrChatClientPort.Port);
+        var current = VrchatClientEndpoint;
+        if (current == null)
+        {
+            VrchatClientEndpoint = endpoint;
+            OnVrcClientDiscovered();
+            return;
+        }
+
+        if (current.Equals(endpoint))
+        {
+            OnVrcClientDiscovered();
+            return;
+        }
+
+        // A different VRChat record than the one in use. A VRChat that crashed or hangs can
+        // leave its record answering next to the live one's, and taking whichever answered
+        // last pointed avatar parsing at a port nobody serves. Decide over HTTP, off this
+        // receive loop.
+        _ = ConsiderOtherClientAsync(current, endpoint, ptrRecord.DomainLabels[0]);
+    }
+
+    /// <summary>
+    /// Moves to another VRChat record only when the one in use no longer answers its OSCQuery
+    /// HTTP and the other one does: a real restart. While the current one answers, it stays.
+    /// Never throws; nobody awaits it.
+    /// </summary>
+    private async Task ConsiderOtherClientAsync(IPEndPoint current, IPEndPoint candidate, string instance)
+    {
+        bool firstLook;
+        lock (_clientCheckLock)
+        {
+            var now = Environment.TickCount64;
+            firstLook = !_clientCheckedAt.TryGetValue(candidate, out var checkedAt);
+            if (_clientCheckRunning || (!firstLook && now - checkedAt < RecheckRecordMs))
+            {
+                return;
+            }
+
+            _clientCheckRunning = true;
+            _clientCheckedAt[candidate] = now;
+        }
+
+        try
+        {
+            // Both at once; the candidate's answer only matters if the current one is gone
+            var candidateProbe = AnswersOscQueryAsync(candidate);
+            if (await AnswersOscQueryAsync(current))
+            {
+                if (firstLook)
+                {
+                    _logger.LogInformation("mDNS: ignoring {instance} at {candidate}: the VRChat at {current} still answers.",
+                        instance, candidate, current);
+                }
+
+                return;
+            }
+
+            if (!await candidateProbe)
+            {
+                _logger.LogDebug("mDNS: neither the VRChat at {current} nor {instance} at {candidate} answers; keeping the first.",
+                    current, instance, candidate);
+                return;
+            }
+
+            VrchatClientEndpoint = candidate;
+            _logger.LogInformation("OSCQuery moved to {candidate} ({instance}): the VRChat at {current} no longer answers.",
+                candidate, instance, current);
+            OnVrcClientDiscovered();
+        }
+        catch (Exception e)
+        {
+            _logger.LogDebug("mDNS: could not check {instance} at {candidate}: {message}", instance, candidate, e.Message);
+        }
+        finally
+        {
+            lock (_clientCheckLock)
+            {
+                _clientCheckRunning = false;
+            }
+        }
+    }
+
+    /// <summary>
+    /// True when an OSCQuery server answers HOST_INFO at the endpoint in time. A crashed
+    /// VRChat's port refuses the connection; a hung one may accept it and never reply.
+    /// </summary>
+    private static async Task<bool> AnswersOscQueryAsync(IPEndPoint endpoint)
+    {
+        using var timeout = new CancellationTokenSource(OscQueryProbeTimeout);
+        try
+        {
+            using var response = await OscQueryProbe.GetAsync($"http://{endpoint}/?HOST_INFO",
+                HttpCompletionOption.ResponseHeadersRead, timeout.Token);
+            return response.IsSuccessStatusCode;
+        }
+        catch (Exception)
+        {
+            // Refused, timed out or reset: either way, nobody there answers
+            return false;
+        }
     }
 
     private async void Listen(UdpClient client, CancellationToken ct)
