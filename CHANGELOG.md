@@ -26,6 +26,10 @@ The two file names never change: the README's download button points at
 
 ## [Unreleased]
 
+## [1.3.0] - 2026-11-19
+Based on upstream VRCFaceTracking 5.4.5. Modules built for VRCFaceTracking 6.0, such as
+QFTPlus, now load.
+
 ### Changed
 - Modules now bind against Core/SDK **6.0.0.0**, the same identity as upstream
   VRCFaceTracking 6.0, whose module API this fork matches. Modules built for 6.0 load
