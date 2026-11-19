@@ -44,11 +44,11 @@ public class ModuleProcessMain
     {
         AppDomain.CurrentDomain.ProcessExit += (sender, e) =>
         {
-            Logger.LogInformation("Received SIGTERM");
+            // Startup may fail before the logger, assembly or update token exists.
+            // Do not log here: the proxy's IPC client may already be disposed.
             WaitForPackets = false;
-            DefModuleAssembly._updateCts.Cancel();
+            DefModuleAssembly?._updateCts?.Cancel();
             cts.Cancel();
-            cts.Token.WaitHandle.WaitOne(TimeSpan.FromSeconds(5));
         };
         
         try
@@ -82,8 +82,12 @@ public class ModuleProcessMain
                 var modulePath = parseResult.GetValue(modulePathOption);
                 var port = parseResult.GetValue(portOption);
                 var parentPid = parseResult.GetValue(parentPidOption);
-                VrcftMain(modulePath!, port ?? 0, parentPid);
-                return 0;
+                if ( string.IsNullOrWhiteSpace(modulePath) || !File.Exists(modulePath) || port is not (>= 1 and <= 65535) )
+                {
+                    Console.Error.WriteLine("A valid --module-path and --port (1-65535) are required.");
+                    return ModuleProcessExitCodes.INVALID_ARGS;
+                }
+                return VrcftMain(modulePath, port.Value, parentPid);
             });
 
             return rootCommand.Parse(args).Invoke();
@@ -91,12 +95,7 @@ public class ModuleProcessMain
         catch ( Exception ex )
         {
             // So that we can catch errors
-            Logger.LogCritical($"{ex.Message}:\n{ex.StackTrace}");
-            Logger.LogCritical($"{ex.Message}");
-#if DEBUG
-            Console.ReadKey();
-            Console.ReadLine();
-#endif
+            Console.Error.WriteLine(ex);
             return ModuleProcessExitCodes.EXCEPTION_CRASH;
         }
         finally
@@ -174,7 +173,11 @@ public class ModuleProcessMain
 
         // Try loading the module
         DefModuleAssembly = new ModuleAssembly(Logger, LoggerFactory, modulePath);
-        DefModuleAssembly.TryLoadAssembly();
+        if ( !DefModuleAssembly.TryLoadAssembly() )
+        {
+            Logger.LogError("Module load failed; exiting without starting the sandbox handshake.");
+            return ModuleProcessExitCodes.MODULE_LOAD_FAILED;
+        }
 
         // Initialise to invalid state
         UnifiedTracking.Data = new() {
@@ -333,7 +336,7 @@ public class ModuleProcessMain
         _connectionTimer = new Timer(_ =>
         {
             Logger.LogWarning("No packets received for {timeout}s, assuming connection lost", CONNECTION_TIMEOUT);
-            Process.GetCurrentProcess().Kill();
+            Environment.Exit(ModuleProcessExitCodes.NETWORK_CONNECTION_TIMED_OUT);
         }, null, TimeSpan.FromSeconds(CONNECTION_TIMEOUT), Timeout.InfiniteTimeSpan);
 
         // Loop infinitely while we wait for commands

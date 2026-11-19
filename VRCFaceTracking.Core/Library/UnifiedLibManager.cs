@@ -64,6 +64,11 @@ public class UnifiedLibManager : ILibManager
     /// </summary>
     private readonly Dictionary<string, StandbyModule> _standby = new(StringComparer.OrdinalIgnoreCase);
 
+    // Load failures cannot heal by restarting the same DLL. Keep both automatic
+    // restart paths from retrying until the user explicitly reinitializes modules.
+    // Guarded by the AvailableSandboxModules lock, like _standby.
+    private readonly HashSet<string> _failedModulePaths = new(StringComparer.OrdinalIgnoreCase);
+
     /// <param name="Name">Display name, for the log and the dormant card.</param>
     /// <param name="WaitsForEye">It can do eye tracking but was not offered the slot.</param>
     /// <param name="WaitsForExpression">It can do face tracking but was not offered the slot.</param>
@@ -233,6 +238,20 @@ public class UnifiedLibManager : ILibManager
         _logger.LogWarning("Module {module} (PID {pid}) died unexpectedly with exit code {code}.", moduleName, module.SandboxProcessPID, exitCode);
         _crashReportService?.ReportModuleCrash(moduleName, exitCode, module.GetOutputTail());
 
+        // ModuleProcessExitCodes.MODULE_LOAD_FAILED. This includes incompatible SDK
+        // references, missing dependencies and module constructor failures.
+        if ( exitCode == -4 )
+        {
+            lock ( AvailableSandboxModules )
+            {
+                _failedModulePaths.Add(module.SandboxModulePath);
+            }
+            const string reason = "Module could not load. See Output for details; install a compatible build and reinitialize modules.";
+            _logger.LogError("Not restarting {module}: {reason}", moduleName, reason);
+            MarkModuleDormant(moduleName, reason, module.SandboxModulePath);
+            return;
+        }
+
         // A module whose source went away is not crashing, it's finished: iFacialMocap for
         // instance gives up (non-zero) after waiting two minutes for a phone that isn't
         // streaming. Restarting into a source that isn't there just loops until the cap,
@@ -320,12 +339,13 @@ public class UnifiedLibManager : ILibManager
     {
         lock ( AvailableSandboxModules )
         {
-            // Standby counts as handled here, which is also what keeps the hot-plug check
-            // from restarting those modules every ten seconds: ResumeStandbyModules decides.
+            // Standby and failed loads count as handled so hot-plug doesn't restart
+            // them every ten seconds. Only standby can resume automatically.
             return AvailableSandboxModules
                 .Where(m => m.Process is { HasExited: false } && !string.IsNullOrEmpty(m.SandboxModulePath))
                 .Select(m => m.SandboxModulePath)
                 .Concat(_standby.Keys)
+                .Concat(_failedModulePaths)
                 .ToList();
         }
     }
@@ -1293,6 +1313,7 @@ public class UnifiedLibManager : ILibManager
 
             // Everything starts from scratch now, so nothing is waiting for a slot any more
             _standby.Clear();
+            _failedModulePaths.Clear();
         }
 
         TeardownEach(sandboxSnapshot);
