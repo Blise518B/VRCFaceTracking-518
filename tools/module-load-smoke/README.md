@@ -16,7 +16,9 @@ complete its handshake/capability request over loopback. They do not call module
 Update or Teardown, which can start hardware or external runtimes.
 
 The checks also run an isolated sandbox with a non-module DLL, assert its prompt
-load-failure exit, exercise supervisor/hot-plug suppression and manual reset, and
-verify the missing-arguments exit does not crash its shutdown handler.
+load-failure exit and that the host turns its output into a specific Output line,
+exercise supervisor/hot-plug suppression and manual reset, check that a missing
+module file is a load failure, and verify the missing-arguments exit does not crash
+its shutdown handler.
 
 Hardware tracking and a complete VR session still need a separate manual test.

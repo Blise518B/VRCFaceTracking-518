@@ -40,6 +40,27 @@ public class ModuleProcessMain
         }
     }
 
+    [DllImport("kernel32.dll")]
+    private static extern IntPtr GetCurrentProcess();
+
+    [DllImport("kernel32.dll")]
+    private static extern bool TerminateProcess(IntPtr hProcess, uint exitCode);
+
+    /// <summary>
+    /// Ends the process at once with <paramref name="exitCode"/>, like the hard kill this
+    /// used to be. Environment.Exit would run every native DLL's shutdown code while the
+    /// module's update thread may still be inside a tracking SDK, and a hang there leaves
+    /// a process the supervisor never sees die, so never restarts.
+    /// </summary>
+    private static void TerminateNow(int exitCode)
+    {
+        if ( OperatingSystem.IsWindows() )
+        {
+            TerminateProcess(GetCurrentProcess(), unchecked(( uint )exitCode));
+        }
+        Environment.Exit(exitCode);
+    }
+
     public static int Main(string[] args)
     {
         AppDomain.CurrentDomain.ProcessExit += (sender, e) =>
@@ -82,10 +103,17 @@ public class ModuleProcessMain
                 var modulePath = parseResult.GetValue(modulePathOption);
                 var port = parseResult.GetValue(portOption);
                 var parentPid = parseResult.GetValue(parentPidOption);
-                if ( string.IsNullOrWhiteSpace(modulePath) || !File.Exists(modulePath) || port is not (>= 1 and <= 65535) )
+                if ( string.IsNullOrWhiteSpace(modulePath) || port is not (>= 1 and <= 65535) )
                 {
                     Console.Error.WriteLine("A valid --module-path and --port (1-65535) are required.");
                     return ModuleProcessExitCodes.INVALID_ARGS;
+                }
+                // A module DLL that is gone can't load either; as a load failure the host
+                // leaves it alone instead of restarting it into the same error.
+                if ( !File.Exists(modulePath) )
+                {
+                    Console.Error.WriteLine($"Module file not found: {modulePath}");
+                    return ModuleProcessExitCodes.MODULE_LOAD_FAILED;
                 }
                 return VrcftMain(modulePath, port.Value, parentPid);
             });
@@ -336,7 +364,7 @@ public class ModuleProcessMain
         _connectionTimer = new Timer(_ =>
         {
             Logger.LogWarning("No packets received for {timeout}s, assuming connection lost", CONNECTION_TIMEOUT);
-            Environment.Exit(ModuleProcessExitCodes.NETWORK_CONNECTION_TIMED_OUT);
+            TerminateNow(ModuleProcessExitCodes.NETWORK_CONNECTION_TIMED_OUT);
         }, null, TimeSpan.FromSeconds(CONNECTION_TIMEOUT), Timeout.InfiniteTimeSpan);
 
         // Loop infinitely while we wait for commands

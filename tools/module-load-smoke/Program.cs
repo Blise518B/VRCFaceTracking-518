@@ -123,7 +123,25 @@ finally
     if (!noArgs.HasExited) noArgs.Kill(entireProcessTree: true);
 }
 
-Console.WriteLine("PASS: module binding, API references, prompt failure, restart suppression, manual retry and early shutdown.");
+// A module DLL that disappeared is a load failure, not bad arguments: the host must not
+// restart it into the same error.
+var missingModule = Path.Combine(AppContext.BaseDirectory, "no-such-module.dll");
+using var missing = StartSandbox(args[0], "--port", "1", "--module-path", missingModule);
+var missingOutput = missing.StandardOutput.ReadToEndAsync();
+var missingError = missing.StandardError.ReadToEndAsync();
+try
+{
+    Check(missing.WaitForExit(10_000), "Missing module file exits promptly");
+    Check(missing.ExitCode == ModuleProcessExitCodes.MODULE_LOAD_FAILED, "Missing module file is a load failure");
+    Check((await missingError).Contains("Module file not found"), "Missing module file is named in process output");
+    await missingOutput;
+}
+finally
+{
+    if (!missing.HasExited) missing.Kill(entireProcessTree: true);
+}
+
+Console.WriteLine("PASS: module binding, API references, prompt failure, load-failure detail, missing module file, restart suppression, manual retry and early shutdown.");
 return 0;
 
 static async Task CheckSandboxHandshake(string exe, string modulePath, (bool Eye, bool Face) supported)
