@@ -248,6 +248,10 @@ public class UnifiedLibManager : ILibManager
             }
             const string reason = "Module could not load. See Output for details; install a compatible build and reinitialize modules.";
             _logger.LogError("Not restarting {module}: {reason}", moduleName, reason);
+            // The sandbox exits before it connects, so the log lines that explain the
+            // failure never arrive over IPC (they wait for the handshake). Its console
+            // output does, through the pipe: put that in Output, or "See Output" lies.
+            _logger.LogError("{module} could not load: {detail}", moduleName, DescribeLoadFailure(module.GetOutputTail()));
             MarkModuleDormant(moduleName, reason, module.SandboxModulePath);
             return;
         }
@@ -279,6 +283,43 @@ public class UnifiedLibManager : ILibManager
         _logger.LogInformation("Restarting module {module}...", moduleName);
         _autoRestartService?.RecordModuleRestart(moduleName);
         InitialiseSandboxesBaseOnPaths(new[] { module.SandboxModulePath });
+    }
+
+    /// <summary>
+    /// The error entries from a sandbox's console output, on one line: what it logged at
+    /// error level, plus exception messages, without stack frames or the generic
+    /// "Module load failed" line. Falls back to the last lines it printed.
+    /// </summary>
+    internal static string DescribeLoadFailure(string? outputTail)
+    {
+        if ( string.IsNullOrWhiteSpace(outputTail) )
+        {
+            return "(the module process printed nothing)";
+        }
+
+        var lines = outputTail.Split('\n').Select(l => l.TrimEnd('\r')).ToList();
+        var picked = new List<string>();
+        var inError = false;
+        foreach ( var line in lines )
+        {
+            // Console logger: "fail: Category[0]" then the message indented on the next lines
+            if ( !line.StartsWith(' ') )
+            {
+                inError = line.StartsWith("fail:") || line.StartsWith("crit:");
+                continue;
+            }
+
+            var text = line.Trim();
+            if ( inError && text.Length > 0 && !text.StartsWith("at ") && !text.StartsWith("Module load failed;") )
+            {
+                picked.Add(text);
+            }
+        }
+
+        var detail = picked.Count > 0
+            ? string.Join(" ", picked)
+            : string.Join(" ", lines.Where(l => l.Trim().Length > 0).TakeLast(3).Select(l => l.Trim()));
+        return detail.Length > 800 ? detail[..800] + "..." : detail;
     }
 
     /// <summary>

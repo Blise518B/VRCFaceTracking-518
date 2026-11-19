@@ -72,8 +72,17 @@ try
 {
     Check(failed.WaitForExit(10_000), "Invalid module exits within 10 seconds");
     Check(failed.ExitCode == ModuleProcessExitCodes.MODULE_LOAD_FAILED, "Load-failure exit code survives command dispatch");
-    Check((await outputTask).Contains("Module load failed"), "Load failure is explained in process output");
+    var failedOutput = await outputTask;
+    Check(failedOutput.Contains("Module load failed"), "Load failure is explained in process output");
     Check(!(await errorTask).Contains("NullReferenceException"), "Early shutdown does not dereference uninitialized state");
+
+    // The host puts the sandbox's own explanation into Output, since the sandbox exits
+    // before its IPC log lines can be sent.
+    var detail = (string)typeof(UnifiedLibManager)
+        .GetMethod("DescribeLoadFailure", BindingFlags.Static | BindingFlags.NonPublic)!
+        .Invoke(null, [failedOutput])!;
+    Check(detail.Contains("does not export an ExtTrackingModule implementation") && !detail.Contains("Module load failed;"),
+        $"Output gets the specific load error, not the generic line (got: {detail})");
 
     // The constructor starts only a background supervisor. With no module data or
     // activation service, it cannot discover/start modules or change user settings.
