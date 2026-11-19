@@ -51,9 +51,11 @@ public class ModuleAssembly
             var validateSharedContract = false;
             foreach ( var reference in references )
             {
-                // QFTPlus .NET 10 builds reference the 6.0 contract. Share the host
-                // types when its referenced API is compatible; keep the fork's
-                // upstream assembly identity and UnifiedTracking static state.
+                // Modules built against a newer upstream (QFTPlus .NET 10 builds asked
+                // for 6.0 while this app was still 5.4.5) share the host types when the
+                // API they reference is here; that keeps one UnifiedTracking static state.
+                // A newer minor release is checked member by member below. A newer major
+                // one is refused outright: that is where upstream breaks its module API.
                 var hostAssembly = reference.Name switch
                 {
                     "VRCFaceTracking.SDK" => typeof(ExtTrackingModule).Assembly.GetName(),
@@ -61,7 +63,7 @@ public class ModuleAssembly
                     _ => null,
                 };
                 if ( hostAssembly != null && reference.Version > hostAssembly.Version &&
-                     reference.Version != new Version(6, 0, 0, 0) )
+                     reference.Version!.Major > hostAssembly.Version!.Major )
                 {
                     _logger.LogError(
                         "Module {dll} requires {assembly} {required}, but this app provides {provided}. " +

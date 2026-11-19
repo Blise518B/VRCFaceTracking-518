@@ -8,9 +8,10 @@ namespace VRCFaceTracking.ModuleProcess;
 
 /// <summary>
 /// Shares the host's tracking contract across the module boundary. Default binding
-/// rejects a 6.0 module reference against the fork's upstream 5.4.5 identity even
-/// when the APIs match. Loading private SDK/Core copies would also break casts and
-/// send tracking updates to a different UnifiedTracking static state.
+/// rejects a module that references a newer Core/SDK version than this app's identity
+/// even when the APIs match (a 6.0 module against the 5.4.5 identity, before the bump
+/// to 6.0.0.0). Loading private SDK/Core copies would also break casts and send
+/// tracking updates to a different UnifiedTracking static state.
 /// </summary>
 internal sealed class ModuleLoadContext(string modulePath) : AssemblyLoadContext(modulePath, isCollectible: true)
 {

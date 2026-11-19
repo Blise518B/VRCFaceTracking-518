@@ -5,19 +5,19 @@ namespace VRCFaceTracking.Core;
 /// <summary>
 /// This fork's own release number, which is deliberately NOT the assembly version.
 ///
-/// The assembly version tracks the upstream VRCFaceTracking release this fork is based
-/// on, because tracking modules bind against it - changing it can stop existing modules
-/// from loading. The fork's releases are numbered independently, starting at 1.0.0, and
-/// that is the number on the GitHub release, in the .exe filename, on the Settings page
-/// and in crash reports.
+/// The assembly version is the Core/SDK identity tracking modules bind against (6.0.0.0,
+/// matching upstream's module API), so it says nothing about either number shown here.
+/// The fork's releases are numbered independently, starting at 1.0.0, and that is the
+/// number on the GitHub release, in the .exe filename, on the Settings page and in crash
+/// reports. The upstream release the code is based on is a separate value again.
 ///
-/// Both come from <c>Directory.Build.props</c>: bump <c>Fork518Version</c> there and
+/// All three come from <c>Directory.Build.props</c>: bump <c>Fork518Version</c> there and
 /// everything else follows.
 /// </summary>
 public static class ForkVersion
 {
     /// <summary>Upstream release this fork is based on, e.g. "5.4.5".</summary>
-    public static string UpstreamBase { get; } = ResolveAssemblyVersion();
+    public static string UpstreamBase { get; } = ResolveUpstreamBase();
 
     /// <summary>This fork's release number, e.g. "1.0.0".</summary>
     public static string Number { get; } = ResolveInformationalVersion();
@@ -55,16 +55,27 @@ public static class ForkVersion
         }
     }
 
-    private static string ResolveAssemblyVersion()
+    // From the UpstreamBaseVersion property (an AssemblyMetadata attribute on every
+    // assembly). Not the assembly version: that is the module-binding identity.
+    private static string ResolveUpstreamBase()
     {
         try
         {
-            var version = (Assembly.GetEntryAssembly() ?? typeof(ForkVersion).Assembly).GetName().Version;
-            return version == null ? "unknown" : $"{version.Major}.{version.Minor}.{version.Build}";
+            foreach (var assembly in new[] { Assembly.GetEntryAssembly(), typeof(ForkVersion).Assembly })
+            {
+                var value = assembly?.GetCustomAttributes<AssemblyMetadataAttribute>()
+                    .FirstOrDefault(a => a.Key == "UpstreamBaseVersion")?.Value;
+                if (!string.IsNullOrWhiteSpace(value))
+                {
+                    return value;
+                }
+            }
         }
         catch (Exception)
         {
-            return "unknown";
+            // Fall through
         }
+
+        return "unknown";
     }
 }
