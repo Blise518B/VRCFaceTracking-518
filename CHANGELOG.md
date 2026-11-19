@@ -26,14 +26,26 @@ The two file names never change: the README's download button points at
 
 ## [Unreleased]
 
+### Changed
+- Modules now bind against Core/SDK **6.0.0.0**, the same identity as upstream
+  VRCFaceTracking 6.0, whose module API this fork matches. Modules built for 6.0 load
+  as they are, and every 5.x and older module still does. Settings and crash reports
+  still name upstream 5.4.5 as the code base.
+
 ### Fixed
 - Load compatible QFTPlus modules built against Core/SDK 6.0 by sharing the host's
-  tracking types and validating their referenced APIs, without changing assembly
-  versions or replacing the module. Previously the loader failed and the sandbox
-  timed out and restarted once a minute.
+  tracking types and validating their referenced APIs, without replacing the module.
+  Previously the loader failed and the sandbox timed out and restarted once a minute.
+  A module built against a later 6.x is checked the same way; one built against a
+  newer major version is refused with a message saying which version it needs.
 - Stop retrying modules that cannot load until modules are explicitly reinitialized.
   Report load failures and connection timeouts with distinct exit codes, and allow
-  early startup failures to exit without crashing the shutdown handler.
+  early startup failures to exit without crashing the shutdown handler. Output says
+  why the module could not load, and a module file that went missing counts as a
+  load failure too.
+
+Both fixes were contributed by @SUPTECGourry in
+[#2](https://github.com/Blise518B/VRCFaceTracking-518/pull/2). Thank you!
 
 ## [1.2.0] - 2026-11-08
 

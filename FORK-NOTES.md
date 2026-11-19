@@ -37,6 +37,34 @@ died or went dormant). A slot it was offered and declined does not count, so a m
 configured for face only never cycles on a free eye slot. Any full re-initialize clears
 standby.
 
+### Modules that cannot load
+
+`VRCFaceTracking.ModuleProcess/ModuleAssembly.cs`, `ModuleLoadContext.cs` (contributed in #2)
+
+A module that cannot load (missing dependency, constructor that throws, a DLL that is not a
+module or is gone, an SDK it needs that this app is too old for) is not a crash and will
+not heal by restarting. The sandbox exits at once with `MODULE_LOAD_FAILED` (-4) instead of
+going on to a handshake with nothing loaded, which used to time out after 60 s and restart
+once a minute. The supervisor writes one crash report, logs the sandbox's own error text to
+Output (the sandbox exits before its IPC log lines would be sent, so the host takes them
+from the captured console output), shows the module dormant with the reason and leaves it
+alone, hot-plug included, until the next full re-initialize. Installing or removing a module
+from the registry and **Restart tracking** both do one.
+
+**Module binding identity.** `AssemblyVersion` in `Directory.Build.props` is the Core/SDK
+version modules bind against, **6.0.0.0** since 2026-11-19, matching upstream 6.0. .NET
+binds a module's reference to an equal or higher version, so every 5.x and older module
+still loads, and a module built for 6.0 (QFTPlus) loads as it is. Upstream 6.0's module API
+is the same as this fork's: the SDK is identical, `UnifiedExpressions` is unchanged and the
+tracking data types only gained helpers the app itself uses. So the number may go up with
+upstream but never down. `ModuleLoadContext` gives every module the app's own Core and SDK,
+so there is one `UnifiedTracking` static state, and a module that asks for a newer 6.x is
+checked reference by reference (`ValidateTrackingContract`) before it is constructed, so a
+missing API is a load failure rather than a `MissingMethodException` mid-session. A newer
+major version is refused with a message naming it. The upstream release the *code* is based
+on is `UpstreamBaseVersion` (5.4.5), which `ForkVersion` shows; it is not the assembly
+version. `tools/module-load-smoke` checks all of this without starting any hardware.
+
 ## 2. App crash watchdog
 
 `VRCFaceTracking.Watchdog/` + wiring in `VRCFaceTracking/App.xaml.cs`
