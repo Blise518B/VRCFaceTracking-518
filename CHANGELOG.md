@@ -33,6 +33,12 @@ The two file names never change: the README's download button points at
   still name upstream 5.4.5 as the code base.
 
 ### Fixed
+- **A dead VRChat record could take over from the live one.** A crashed or hung VRChat can
+  leave its network announcement answering next to the running VRChat's, and the app
+  followed whichever announced itself last, so reading the avatar's parameters could go to a
+  VRChat that no longer exists. Now it stays with the VRChat it uses for as long as that one
+  answers, and moves to another only once the old one stops answering and the new one
+  answers. The log says when it ignores a record and when it moves.
 - Load compatible QFTPlus modules built against Core/SDK 6.0 by sharing the host's
   tracking types and validating their referenced APIs, without replacing the module.
   Previously the loader failed and the sandbox timed out and restarted once a minute.
@@ -44,7 +50,7 @@ The two file names never change: the README's download button points at
   why the module could not load, and a module file that went missing counts as a
   load failure too.
 
-Both fixes were contributed by @SUPTECGourry in
+The two module-loading fixes were contributed by @SUPTECGourry in
 [#2](https://github.com/Blise518B/VRCFaceTracking-518/pull/2). Thank you!
 
 ## [1.2.0] - 2026-11-08

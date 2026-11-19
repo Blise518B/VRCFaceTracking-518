@@ -452,6 +452,52 @@ release exists.
 
 ---
 
+## 11. Two VRChat records
+
+`VRCFaceTracking.Core/mDNS/MulticastDnsService.cs` (`ResolveVrChatClient`,
+`ConsiderOtherClientAsync`)
+
+Upstream sets `VrchatClientEndpoint` from every mDNS answer for a `VRChat-Client-*` (or
+`ChilloutVR-GameClient-*`) `_oscjson._tcp` record, so with two records answering, the endpoint
+flips to whichever answered last. A crashed or hung VRChat can leave its record answering next
+to the live one: OscGoesPurrr's log of 2026-11-08 (07:48-09:29) had a dead `VRChat-Client-305E19`
+(port 51722) next to the live `VRChat-Client-28372B` (port 59868) for 1.7 h. Once the endpoint
+lands on the dead one, `OscQueryConfigParser.ParseAvatar` reads `/avatar` from a port nobody
+serves and the avatar's parameters aren't mapped. This is the 518 connection standard's rule
+R17, "only a VRChat that answers is VRChat":
+
+- **The first record is taken as before**, at once and without a check, and the same record
+  again changes nothing.
+- **A different record is checked over HTTP**, off the mDNS receive loop: `GET /?HOST_INFO`
+  on both endpoints, 2 s timeout, answered means a 2xx. While the endpoint in use answers,
+  it stays. The other record replaces it only when the one in use doesn't answer and the
+  other one does: a real restart. Then `OnVrcClientDiscovered` fires, as upstream does on
+  every flip.
+- **Neither answers: nothing changes.** The next announcement of that record checks again.
+- **One check at a time, and a record is checked at most every 5 s**, however often it is
+  announced.
+
+VRCFT keeps no mDNS cache, so a VRChat that has fully exited can't cause this; it needs a
+responder still answering for it. None of VRCFT's own logs show it, though: they name only
+the first endpoint (`OSCQuery detected at ...`), and a flip went unlogged. Now the log says
+`mDNS: ignoring <record> at <endpoint> ...` (once per record) and
+`OSCQuery moved to <endpoint> ...`.
+
+A closed port on 127.0.0.1 takes Windows about 2 s to refuse, so after a restart the endpoint
+moves about 2 s after the new VRChat's first announcement.
+
+`tools/mdns-endpoint-check` checks all of it offline against fake OSCQuery servers (README
+there). Not checked against a real VRChat:
+
+- that VRChat answers `/?HOST_INFO` (the OSCQuery spec has it, and vrc-oscquery-lib serves it);
+- a hung VRChat whose HTTP still answers HOST_INFO counts as answering and stays in use, even
+  if its `/avatar` no longer does;
+- whether the move always comes before a restarted VRChat's first `/avatar/change`. If it
+  doesn't, that avatar is read from the old port and fails, as it could before this change,
+  until the next avatar change.
+
+---
+
 ## Building
 
 Requires .NET 10 SDK on Windows.
