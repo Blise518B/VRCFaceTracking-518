@@ -2,7 +2,6 @@
 using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
-using System.Runtime.Loader;
 using System.Text;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
@@ -35,22 +34,44 @@ public class ModuleAssembly
         Loaded          = false;
     }
 
-    public void TryLoadAssembly()
+    public bool TryLoadAssembly()
     {
         if ( Loaded )
         {
-            return;
+            return true;
         }
 
         try
         {
-            var alc = new AssemblyLoadContext(ModulePath, true);
+            var alc = new ModuleLoadContext(ModulePath);
             Assembly = alc.LoadFromAssemblyPath(ModulePath);
 
             var references = Assembly.GetReferencedAssemblies();
             var oldRefs = false;
+            var validateSharedContract = false;
             foreach ( var reference in references )
             {
+                // QFTPlus .NET 10 builds reference the 6.0 contract. Share the host
+                // types when its referenced API is compatible; keep the fork's
+                // upstream assembly identity and UnifiedTracking static state.
+                var hostAssembly = reference.Name switch
+                {
+                    "VRCFaceTracking.SDK" => typeof(ExtTrackingModule).Assembly.GetName(),
+                    "VRCFaceTracking.Core" => typeof(UnifiedTracking).Assembly.GetName(),
+                    _ => null,
+                };
+                if ( hostAssembly != null && reference.Version > hostAssembly.Version &&
+                     reference.Version != new Version(6, 0, 0, 0) )
+                {
+                    _logger.LogError(
+                        "Module {dll} requires {assembly} {required}, but this app provides {provided}. " +
+                        "Install a compatible module build, or rebuild it against this app's Core and SDK DLLs.",
+                        Path.GetFileName(ModulePath), reference.Name, reference.Version, hostAssembly.Version);
+                    return false;
+                }
+
+                validateSharedContract |= hostAssembly != null && reference.Version > hostAssembly.Version;
+
                 if ( reference.Name == "VRCFaceTracking" || reference.Name == "VRCFaceTracking.Core" )
                 {
                     if ( reference.Version < new Version(5, 0, 0, 0) )
@@ -62,7 +83,12 @@ public class ModuleAssembly
             }
             if ( oldRefs )
             {
-                return;
+                return false;
+            }
+
+            if ( validateSharedContract )
+            {
+                ModuleLoadContext.ValidateTrackingContract(Assembly, ModulePath);
             }
 
             foreach ( var type in Assembly.GetExportedTypes() )
@@ -73,14 +99,18 @@ public class ModuleAssembly
                 }
 
                 _logger.LogDebug("{module} properly implements ExtTrackingModule.", type.Name);
-                Loaded          = true;
                 TrackingModule  = LoadExternalModule();
-                break;
+                Loaded          = TrackingModule != null;
+                return Loaded;
             }
+
+            _logger.LogError("Module {dll} does not export an ExtTrackingModule implementation.", Path.GetFileName(ModulePath));
         } catch ( Exception e )
         {
-            _logger.LogWarning("{error} Assembly not able to be loaded. Skipping.", e.Message);
+            _logger.LogError(e, "Module {dll} could not be loaded.", Path.GetFileName(ModulePath));
         }
+
+        return false;
     }
 
     private ExtTrackingModule LoadExternalModule()

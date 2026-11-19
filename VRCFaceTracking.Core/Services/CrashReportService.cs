@@ -481,9 +481,10 @@ public class CrashReportService
 
     private static string DescribeExitCode(int exitCode) => exitCode switch
     {
-        -1 => " (invalid arguments)",
+        -1 => " (invalid arguments or forced termination)",
         -2 => " (network connection timed out)",
         -3 => " (unhandled exception inside the module)",
+        -4 => " (module could not load - see module output for dependency or SDK errors)",
         -1073741819 => " (0xC0000005 ACCESS_VIOLATION - a native crash inside the module)",
         -1073741571 => " (0xC00000FD STACK_OVERFLOW)",
         -1073741795 => " (0xC000001D ILLEGAL_INSTRUCTION)",

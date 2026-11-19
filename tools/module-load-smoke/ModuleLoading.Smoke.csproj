@@ -1,0 +1,12 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <SelfContained>true</SelfContained>
+    <RuntimeIdentifier>win-x64</RuntimeIdentifier>
+    <TargetFramework>$(VftUiTargetFramework)</TargetFramework>
+    <TargetPlatformMinVersion>$(VftTargetPlatformMinVersion)</TargetPlatformMinVersion>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../../VRCFaceTracking.ModuleProcess/VRCFaceTracking.ModuleProcess.csproj" />
+  </ItemGroup>
+</Project>

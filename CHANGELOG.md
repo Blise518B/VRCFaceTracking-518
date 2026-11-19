@@ -26,6 +26,15 @@ The two file names never change: the README's download button points at
 
 ## [Unreleased]
 
+### Fixed
+- Load compatible QFTPlus modules built against Core/SDK 6.0 by sharing the host's
+  tracking types and validating their referenced APIs, without changing assembly
+  versions or replacing the module. Previously the loader failed and the sandbox
+  timed out and restarted once a minute.
+- Stop retrying modules that cannot load until modules are explicitly reinitialized.
+  Report load failures and connection timeouts with distinct exit codes, and allow
+  early startup failures to exit without crashing the shutdown handler.
+
 ## [1.2.0] - 2026-11-08
 
 First public release.
