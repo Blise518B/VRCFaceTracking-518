@@ -148,8 +148,17 @@ public partial class OscRouterClient : ObservableObject
             var localPort = ((IPEndPoint)_socket.LocalEndPoint!).Port;
 
             _cts = new CancellationTokenSource();
-            _ = KeepAliveLoop(localPort, _cts.Token);
-            _ = ReceiveLoop(_cts.Token);
+            var socket = _socket;
+            var token = _cts.Token;
+
+            // Both loops run on the thread pool. Started inline they captured the caller's
+            // context - the UI thread, as App.OnLaunched initializes this client - so every
+            // datagram the router forwards (VRChat's whole avatar-parameter stream, ~2,000 a
+            // second with a native face tracking avatar) resumed on the UI thread: ~4,000
+            // wake-ups a second there, with page switches queued behind them. The direct
+            // OscRecvService path already runs its handlers on the thread pool.
+            _ = Task.Run(() => KeepAliveLoop(socket, localPort, token));
+            _ = Task.Run(() => ReceiveLoop(socket, localPort, token));
 
             _logger.LogInformation(
                 "OSC Router 518 client listening on port {port}, subscribing at 127.0.0.1:{router}.",
@@ -184,14 +193,15 @@ public partial class OscRouterClient : ObservableObject
         }
     }
 
-    private async Task KeepAliveLoop(int localPort, CancellationToken token)
+    /// <summary>Runs on the thread pool with its own socket (see StartListening).</summary>
+    private async Task KeepAliveLoop(Socket socket, int localPort, CancellationToken token)
     {
         var subscribe = BuildControl("/router518/subscribe", localPort, ProgramName);
         while (!token.IsCancellationRequested)
         {
             try
             {
-                _socket?.SendTo(subscribe, RouterEndpoint);
+                socket.SendTo(subscribe, RouterEndpoint);
             }
             catch (Exception)
             {
@@ -219,14 +229,18 @@ public partial class OscRouterClient : ObservableObject
         }
     }
 
-    private async Task ReceiveLoop(CancellationToken token)
+    /// <summary>
+    /// Runs on the thread pool with its own socket (see StartListening). It holds the socket
+    /// it was started with: after a toggle off and on, the field already names the next one.
+    /// </summary>
+    private async Task ReceiveLoop(Socket socket, int localPort, CancellationToken token)
     {
         var buffer = new byte[4096];
-        while (!token.IsCancellationRequested && _socket != null)
+        while (!token.IsCancellationRequested)
         {
             try
             {
-                var received = await _socket.ReceiveAsync(buffer, SocketFlags.None, token);
+                var received = await socket.ReceiveAsync(buffer, SocketFlags.None, token);
                 if (received <= 0)
                 {
                     continue;
@@ -238,7 +252,7 @@ public partial class OscRouterClient : ObservableObject
                         .SequenceEqual(ControlPrefix))
                 {
                     _lastReplyUtc = DateTime.UtcNow;
-                    SetStatus($"connected on port {((IPEndPoint)_socket!.LocalEndPoint!).Port} (router is running)");
+                    SetStatus($"connected on port {localPort} (router is running)");
                     continue;
                 }
 

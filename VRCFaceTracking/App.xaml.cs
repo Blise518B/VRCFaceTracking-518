@@ -206,6 +206,9 @@ public partial class App : Application
     {
         base.OnLaunched(args);
 
+        // Before anything that can start background work: see DispatcherService.UiQueue
+        DispatcherService.UiQueue = DispatcherQueue.GetForCurrentThread();
+
         // Deliberately no SentrySdk.Init - see the logging configuration for why this
         // fork does not report to upstream's Sentry project. Crashes are captured
         // locally by CrashReportService, which knows about this fork's own subsystems.
@@ -348,6 +351,10 @@ public partial class App : Application
         // Give the pipeline performance watch a logger so stall warnings (with their
         // stage breakdown) land in latest.log instead of vanishing.
         PipelineWatch.Logger = GetService<ILoggerFactory>().CreateLogger("PipelineWatch");
+
+        // Same for the window: every UI-thread freeze (a page switch that hangs) is logged
+        // with its length and its cause - busy, GC, or starved of CPU at low priority.
+        UiWatch.Start(GetService<ILoggerFactory>().CreateLogger("UiWatch"), GetService<INavigationService>());
 
         // Before the shell exists, so the banner can report how an update the previous
         // session started went

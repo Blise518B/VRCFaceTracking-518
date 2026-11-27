@@ -1,0 +1,15 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- Times page switches in a running VRCFaceTracking from the outside (UI Automation +
+       WM_NULL pings + UI-thread CPU time). Not part of VRCFaceTracking.sln, so it never
+       ships and CI never builds it. See README.md. -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>$(VftTargetFramework)-windows</TargetFramework>
+    <UseWPF>true</UseWPF>
+    <IsPackable>false</IsPackable>
+    <Platforms>x64</Platforms>
+    <PlatformTarget>x64</PlatformTarget>
+  </PropertyGroup>
+
+</Project>
