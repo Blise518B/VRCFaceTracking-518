@@ -23,6 +23,7 @@ public class PageService : IPageService
         Configure<CurvesViewModel, CurvesPage>();
         Configure<SourcesViewModel, SourcesPage>();
         Configure<TrackingDebugViewModel, TrackingDebugPage>();
+        Configure<DreamAirEyesViewModel, DreamAirEyesPage>();
         Configure<UtilitiesViewModel, UtilitiesPage>();
         Configure<VrcOutputViewModel, VrcOutputPage>();
         Configure<CompatibilityViewModel, CompatibilityPage>();

@@ -100,6 +100,20 @@
                                    Foreground="{ThemeResource TextFillColorTertiaryBrush}"/>
                     </Border>
 
+                    <!-- The per-signal eye mix (Dream Air Eyes page), when the module has one -->
+                    <Border Grid.Column="1" Margin="12,0,12,0"
+                            CornerRadius="10" Padding="14,8,14,8"
+                            VerticalAlignment="Center" HorizontalAlignment="Left"
+                            Background="{StaticResource Cat518PurpleTint}"
+                            BorderBrush="{StaticResource Cat518Purple}"
+                            BorderThickness="2"
+                            Visibility="{x:Bind ViewModel.MixBadgeVisibility, Mode=OneWay}">
+                        <TextBlock Text="{x:Bind ViewModel.MixBadge, Mode=OneWay}"
+                                   FontSize="16" FontWeight="Bold"
+                                   Foreground="{StaticResource Cat518Purple}"
+                                   TextWrapping="Wrap"/>
+                    </Border>
+
                     <StackPanel Grid.Column="2" VerticalAlignment="Center">
                         <TextBlock Text="Source mode"
                                    FontSize="11"

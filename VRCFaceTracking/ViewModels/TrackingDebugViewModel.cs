@@ -190,7 +190,30 @@ public partial class TrackingDebugViewModel : ObservableRecipient
         public long TimestampMs { get; set; }
         public string Mode { get; set; } = "auto";
         public string ActiveSource { get; set; } = "";
+
+        // Eye mix (per-signal sources, see the Dream Air Eyes page). Empty on older modules.
+        public string Bridge { get; set; } = "";
+        public string MixLids { get; set; } = "";
+        public string MixWide { get; set; } = "";
+        public string MixSquint { get; set; } = "";
+        public string MixBrows { get; set; } = "";
+        public string MixName { get; set; } = "";
+        public string ActiveLids { get; set; } = "";
+        public string ActiveWide { get; set; } = "";
+        public string ActiveSquint { get; set; } = "";
+        public string ActiveBrows { get; set; } = "";
+        public string Fallback { get; set; } = "";
+
+        public bool HasMix => MixLids.Length > 0 || ActiveLids.Length > 0;
     }
+
+    /// <summary>"EYE MIX: A - SRanibro eyes + Babble squint" - empty while the module publishes no mix.</summary>
+    [ObservableProperty] private string _mixBadge = string.Empty;
+
+    public Microsoft.UI.Xaml.Visibility MixBadgeVisibility =>
+        string.IsNullOrEmpty(MixBadge) ? Microsoft.UI.Xaml.Visibility.Collapsed : Microsoft.UI.Xaml.Visibility.Visible;
+
+    partial void OnMixBadgeChanged(string value) => OnPropertyChanged(nameof(MixBadgeVisibility));
 
     public TrackingDebugViewModel()
     {
@@ -421,6 +444,16 @@ public partial class TrackingDebugViewModel : ObservableRecipient
         }
     }
 
+    /// <summary>The preset name when the configured mix matches one, else "Custom mix".</summary>
+    private static string MixName(RoutingSnapshot routing)
+    {
+        var preset = global::VRCFaceTracking.Services.DreamAirModuleLink.Presets.FirstOrDefault(p =>
+            p.Matches(routing.MixLids, routing.MixWide, routing.MixSquint, routing.MixBrows));
+        return preset?.Name ?? "Custom mix";
+    }
+
+    private static string Src(string source) => global::VRCFaceTracking.Services.DreamAirModuleLink.SourceLabel(source);
+
     private void RefreshSummaries()
     {
         var eyeOwner = _libManager.LoadedModulesMetadata.FirstOrDefault(m => m.UsingEye)?.Name ?? "-";
@@ -431,7 +464,14 @@ public partial class TrackingDebugViewModel : ObservableRecipient
             ? "Module routing file not found or stale - showing slot owners only."
             : $"{_routing.Module}:  gaze = {_routing.Gaze}   |   lids = {_routing.Lids}   |   " +
               $"shapes = {_routing.Shapes} (ETVR {_routing.EtvrRate}/s, Babble {_routing.BabbleRate}/s)   |   " +
-              $"pupil = {_routing.Pupil}   |   relay = {_routing.Relay}";
+              $"pupil = {_routing.Pupil}   |   relay = {_routing.Relay}" +
+              (_routing.HasMix
+                  ? $"   |   mix = {MixName(_routing)}: lids {Src(_routing.ActiveLids)}, wide {Src(_routing.ActiveWide)}, " +
+                    $"squint {Src(_routing.ActiveSquint)}, brows {Src(_routing.ActiveBrows)}" +
+                    (_routing.Fallback.Length > 0 ? $" (fallback: {_routing.Fallback})" : string.Empty)
+                  : string.Empty);
+
+        MixBadge = _routing is { HasMix: true } ? $"EYE MIX: {MixName(_routing)}" : string.Empty;
 
         // Live pipeline health from the always-on performance watch
         var moduleAge = PipelineWatch.ModuleDataAgeMs;

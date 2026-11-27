@@ -27,6 +27,7 @@ public class TrackingSourceDetector
     /// <summary>Source names referenced from other services (companion app defaults).</summary>
     public const string EtvrSourceName = "EyeTrackVR (ETVR)";
     public const string BrokenEyeSourceName = "BrokenEye (Dream Air Tobii bridge)";
+    public const string SranibroSourceName = "SRanibro (Dream Air eyes)";
     public const string BabbleSourceName = "Project Babble";
     public const string SteamLinkSourceName = "Steam Link";
 
@@ -202,9 +203,27 @@ public class TrackingSourceDetector
             // while the headset is live (measured), so frames = Dream Air
             // really in use. The app being merely open is the Launch Apps
             // page's business, not module gating's.
+            //
+            // SRanibro serves the same TCP API, so this entry stands for "a Tobii bridge
+            // delivers frames" whichever bridge it is; the probe tells them apart.
             CustomProbe = ProbeBrokenEyeStream,
             Notes = "Bridges the headset's Tobii tracker to TCP + MJPEG for the merged eye module "
-                  + "and the camera apps. Detected by live Tobii frames, not by the app being open.",
+                  + "and the camera apps. Detected by live Tobii frames on TCP 5555 (from BrokenEye "
+                  + "or SRanibro), not by the app being open.",
+        },
+        new()
+        {
+            // The other Tobii bridge. Process-based on purpose: this entry is about the app
+            // (launch button, auto-launch, bridge watchdog). Whether the Dream Air module
+            // starts is the TCP 5555 entry's business, which judges SRanibro's frames by
+            // content. Keyword "sranibro" only matches SRanibro's own VRCFT module.
+            Name = SranibroSourceName,
+            ModuleKeywords = new[] { "sranibro" },
+            Processes = new[] { "SRanibro*" },
+            Notes = "Dream Air / Crystal eye tracking with its own eyelid model. Serves the same TCP "
+                  + "API as BrokenEye on 5555 (the merged DreamAir eye module reads it) and the eye "
+                  + "cameras as MJPEG on 5556 for Babble / EyeTrackVR. Cannot run alongside BrokenEye: "
+                  + "both take the Tobii tracker.",
         },
         new()
         {
@@ -735,44 +754,31 @@ public class TrackingSourceDetector
         return result;
     }
 
+    /// <remarks>
+    /// Bridge-aware since SRanibro serves the same API: BrokenEye only streams once it has
+    /// the tracker, so any frame counts; SRanibro streams all-invalid zero frames at 120 Hz
+    /// even with no headset, so its frames only count when an eye value is valid or SteamVR's
+    /// headset is a Pimax. Without that, a forgotten SRanibro would start the Dream Air module
+    /// on a Quest Pro day and race Virtual Desktop for the eye slot.
+    /// </remarks>
     private static string? ProbeBrokenEyeStreamUncached()
     {
-        try
+        var sample = TobiiBridgeProbe.Probe(400);
+        if (!sample.Connected)
         {
-            using var socket = new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp);
-
-            // Cancel and wait for the connect, never just walk away from it. Windows takes
-            // about 2 s to refuse a loopback connect, so with BrokenEye closed this always
-            // timed out - and BeginConnect + WaitOne then disposed the socket with the
-            // connect still pending. That connect faulted with nobody observing it: the
-            // "[App] Ignored an abandoned socket task from connection teardown" line once
-            // per sweep, ~6 a minute all session.
-            using (var timeout = new CancellationTokenSource(250))
-            {
-                try
-                {
-                    socket.ConnectAsync(new IPEndPoint(IPAddress.Loopback, 5555), timeout.Token)
-                        .AsTask().GetAwaiter().GetResult();
-                }
-                catch (Exception)
-                {
-                    return null; // refused, timed out or wedged - not live either way
-                }
-            }
-
-            socket.NoDelay = true;
-            socket.ReceiveTimeout = 400;
-            socket.Send(new byte[] { 0x00 });
-
-            // A packet header is [1B id][4B length]; any bytes at all mean the
-            // tracker is delivering frames right now.
-            var buffer = new byte[64];
-            var read = socket.Receive(buffer);
-            return read > 0 ? "Tobii frames streaming on TCP 5555" : null;
+            return null; // refused, timed out or wedged - not live either way
         }
-        catch (Exception)
+
+        switch (sample.Kind)
         {
-            return null;
+            case TobiiBridgeKind.BrokenEye:
+                return "BrokenEye Tobii frames on TCP 5555";
+            case TobiiBridgeKind.Sranibro when sample.AnyValid:
+                return "SRanibro frames on TCP 5555 (eyes tracked)";
+            case TobiiBridgeKind.Sranibro when CompanionAppService.ActiveHmdIsPimax() == true:
+                return "SRanibro frames on TCP 5555 (Pimax headset active)";
+            default:
+                return null;
         }
     }
 

@@ -1,0 +1,296 @@
+<Page
+    x:Class="VRCFaceTracking.Views.DreamAirEyesPage"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:vm="using:VRCFaceTracking.ViewModels">
+
+    <Page.Resources>
+        <!-- One big LIDS / WIDE / SQUINT / BROWS chip: the source that drives it right now -->
+        <DataTemplate x:Key="MixChipTemplate" x:DataType="vm:MixChip">
+            <Border CornerRadius="10" Padding="16,10,16,10" MinWidth="170" Margin="0,0,10,0"
+                    Background="{x:Bind Background, Mode=OneWay}"
+                    BorderBrush="{x:Bind Edge, Mode=OneWay}"
+                    BorderThickness="2">
+                <StackPanel Spacing="2">
+                    <TextBlock Text="{x:Bind Label}"
+                               FontSize="11" FontWeight="SemiBold"
+                               Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
+                    <StackPanel Orientation="Horizontal" Spacing="6">
+                        <TextBlock Text="&#x26A0;"
+                                   FontSize="18" FontWeight="Bold"
+                                   Foreground="{StaticResource Cat518Red}"
+                                   VerticalAlignment="Center"
+                                   Visibility="{x:Bind FallbackVisibility, Mode=OneWay}"/>
+                        <TextBlock Text="{x:Bind SourceText, Mode=OneWay}"
+                                   FontSize="22" FontWeight="Bold"
+                                   Foreground="{x:Bind Foreground, Mode=OneWay}"/>
+                    </StackPanel>
+                    <TextBlock Text="{x:Bind Note, Mode=OneWay}"
+                               FontSize="11"
+                               Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                               TextWrapping="Wrap" MaxWidth="170"
+                               Visibility="{x:Bind NoteVisibility, Mode=OneWay}"/>
+                </StackPanel>
+            </Border>
+        </DataTemplate>
+
+        <!-- One-click variation button -->
+        <DataTemplate x:Key="PresetTemplate" x:DataType="vm:PresetButton">
+            <Button Click="{x:Bind Apply}"
+                    MinWidth="210" Margin="0,0,10,10"
+                    Padding="14,10,14,10"
+                    HorizontalContentAlignment="Left"
+                    Background="{x:Bind Background, Mode=OneWay}"
+                    BorderBrush="{x:Bind Edge, Mode=OneWay}"
+                    BorderThickness="2">
+                <StackPanel Spacing="2">
+                    <StackPanel Orientation="Horizontal" Spacing="10">
+                        <TextBlock Text="{x:Bind Key}"
+                                   FontSize="22" FontWeight="Bold"
+                                   Foreground="{x:Bind Foreground, Mode=OneWay}"/>
+                        <TextBlock Text="{x:Bind Title}"
+                                   FontSize="15" FontWeight="SemiBold"
+                                   VerticalAlignment="Center"/>
+                    </StackPanel>
+                    <TextBlock Text="{x:Bind Detail}"
+                               FontSize="11"
+                               Foreground="{ThemeResource TextFillColorTertiaryBrush}"/>
+                </StackPanel>
+            </Button>
+        </DataTemplate>
+    </Page.Resources>
+
+    <ScrollViewer VerticalScrollBarVisibility="Auto">
+        <StackPanel Spacing="12" Margin="0,0,0,20">
+
+            <!-- NOW banner : the unmissable one -->
+            <Border Style="{StaticResource Cat518SectionBorderStyle}"
+                    Background="{StaticResource Cat518PurpleTint}"
+                    BorderBrush="{StaticResource Cat518PurpleEdge}">
+                <StackPanel Spacing="10">
+                    <TextBlock Text="{x:Bind ViewModel.VariationTitle, Mode=OneWay}"
+                               FontSize="28" FontWeight="Bold"
+                               Foreground="{StaticResource Cat518Purple}"
+                               TextWrapping="Wrap"/>
+                    <ItemsControl ItemsSource="{x:Bind ViewModel.Chips}"
+                                  ItemTemplate="{StaticResource MixChipTemplate}">
+                        <ItemsControl.ItemsPanel>
+                            <ItemsPanelTemplate>
+                                <StackPanel Orientation="Horizontal"/>
+                            </ItemsPanelTemplate>
+                        </ItemsControl.ItemsPanel>
+                    </ItemsControl>
+                    <TextBlock Text="{x:Bind ViewModel.VariationDetail, Mode=OneWay}"
+                               FontSize="12"
+                               Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                               TextWrapping="Wrap"/>
+                    <TextBlock Text="Chip colours: SRanibro purple, Babble yellow, ETVR cyan, Tobii blue. A red edge means the chosen app is not streaming and the signal fell back."
+                               FontSize="10"
+                               Foreground="{ThemeResource TextFillColorTertiaryBrush}"
+                               TextWrapping="Wrap"/>
+                </StackPanel>
+            </Border>
+
+            <!-- Eye-slot guard : red, only when Babble holds (or can grab) the eye slot -->
+            <Border Style="{StaticResource Cat518SectionBorderStyle}"
+                    Background="{StaticResource Cat518RedTint}"
+                    BorderBrush="{StaticResource Cat518RedEdge}"
+                    Visibility="{x:Bind ViewModel.GuardVisibility, Mode=OneWay}">
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="1*"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+                    <StackPanel VerticalAlignment="Center" Spacing="2">
+                        <TextBlock Text="{x:Bind ViewModel.GuardText, Mode=OneWay}"
+                                   FontWeight="SemiBold"
+                                   Foreground="{StaticResource Cat518Red}"
+                                   TextWrapping="Wrap"/>
+                        <TextBlock Text="The fix keeps Babble for the mouth and lets the DreamAir module own the eyes. Tracking restarts once."
+                                   FontSize="11"
+                                   Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                   TextWrapping="Wrap"/>
+                        <TextBlock Text="{x:Bind ViewModel.GuardResult, Mode=OneWay}"
+                                   FontSize="11"
+                                   TextWrapping="Wrap"/>
+                    </StackPanel>
+                    <Button Grid.Column="1" Margin="12,0,0,0"
+                            VerticalAlignment="Center"
+                            Click="{x:Bind ViewModel.MakeBabbleFaceOnly}">
+                        <TextBlock Text="Make Babble face-only" FontWeight="Bold"/>
+                    </Button>
+                </Grid>
+            </Border>
+
+            <!-- Variations : green -->
+            <Border Style="{StaticResource Cat518SectionBorderStyle}"
+                    Background="{StaticResource Cat518GreenTint}"
+                    BorderBrush="{StaticResource Cat518GreenEdge}">
+                <StackPanel Spacing="6">
+                    <TextBlock Text="Variations - one click, live, no restart"
+                               FontWeight="SemiBold"
+                               Foreground="{StaticResource Cat518Green}"/>
+                    <ItemsControl ItemsSource="{x:Bind ViewModel.Presets}"
+                                  ItemTemplate="{StaticResource PresetTemplate}">
+                        <ItemsControl.ItemsPanel>
+                            <ItemsPanelTemplate>
+                                <VariableSizedWrapGrid Orientation="Horizontal" ItemWidth="300"/>
+                            </ItemsPanelTemplate>
+                        </ItemsControl.ItemsPanel>
+                    </ItemsControl>
+                    <TextBlock Text="Gaze and pupil always come from the Tobii tracker. The variations only change where eyelids, wide eyes, squint and brows come from."
+                               FontSize="11"
+                               Foreground="{ThemeResource TextFillColorTertiaryBrush}"
+                               TextWrapping="Wrap"/>
+                </StackPanel>
+            </Border>
+
+            <!-- Per-signal fine control : cyan -->
+            <Border Style="{StaticResource Cat518SectionBorderStyle}"
+                    Background="{StaticResource Cat518CyanTint}"
+                    BorderBrush="{StaticResource Cat518CyanEdge}"
+                    IsHitTestVisible="{x:Bind ViewModel.MixSupported, Mode=OneWay}">
+                <StackPanel Spacing="6">
+                    <TextBlock Text="Per signal"
+                               FontWeight="SemiBold"
+                               Foreground="{StaticResource Cat518Cyan}"/>
+                    <Grid ColumnSpacing="12" RowSpacing="4">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="80"/>
+                            <ColumnDefinition Width="1*"/>
+                        </Grid.ColumnDefinitions>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="Auto"/>
+                        </Grid.RowDefinitions>
+
+                        <TextBlock Text="Lids" FontWeight="SemiBold" VerticalAlignment="Center"/>
+                        <RadioButtons Grid.Column="1" MaxColumns="5"
+                                      SelectedIndex="{x:Bind ViewModel.LidsIndex, Mode=TwoWay}">
+                            <RadioButton Content="Auto" MinWidth="0"/>
+                            <RadioButton Content="SRanibro" MinWidth="0"/>
+                            <RadioButton Content="Babble" MinWidth="0"/>
+                            <RadioButton Content="ETVR" MinWidth="0"/>
+                            <RadioButton Content="Tobii (blink only)" MinWidth="0"/>
+                        </RadioButtons>
+
+                        <TextBlock Grid.Row="1" Text="Wide" FontWeight="SemiBold" VerticalAlignment="Center"/>
+                        <RadioButtons Grid.Row="1" Grid.Column="1" MaxColumns="5"
+                                      SelectedIndex="{x:Bind ViewModel.WideIndex, Mode=TwoWay}">
+                            <RadioButton Content="Auto" MinWidth="0"/>
+                            <RadioButton Content="SRanibro" MinWidth="0"/>
+                            <RadioButton Content="Babble" MinWidth="0"/>
+                            <RadioButton Content="ETVR" MinWidth="0"/>
+                            <RadioButton Content="Off" MinWidth="0"/>
+                        </RadioButtons>
+
+                        <TextBlock Grid.Row="2" Text="Squint" FontWeight="SemiBold" VerticalAlignment="Center"/>
+                        <RadioButtons Grid.Row="2" Grid.Column="1" MaxColumns="5"
+                                      SelectedIndex="{x:Bind ViewModel.SquintIndex, Mode=TwoWay}">
+                            <RadioButton Content="Auto" MinWidth="0"/>
+                            <RadioButton Content="SRanibro" MinWidth="0"/>
+                            <RadioButton Content="Babble" MinWidth="0"/>
+                            <RadioButton Content="ETVR" MinWidth="0"/>
+                            <RadioButton Content="Off" MinWidth="0"/>
+                        </RadioButtons>
+
+                        <TextBlock Grid.Row="3" Text="Brows" FontWeight="SemiBold" VerticalAlignment="Center"/>
+                        <RadioButtons Grid.Row="3" Grid.Column="1" MaxColumns="5"
+                                      SelectedIndex="{x:Bind ViewModel.BrowsIndex, Mode=TwoWay}">
+                            <RadioButton Content="Auto" MinWidth="0"/>
+                            <RadioButton Content="SRanibro" MinWidth="0"/>
+                            <RadioButton Content="Babble" MinWidth="0"/>
+                            <RadioButton Content="ETVR" MinWidth="0"/>
+                            <RadioButton Content="Off" MinWidth="0"/>
+                        </RadioButtons>
+                    </Grid>
+                    <TextBlock Text="Auto = the old behaviour (follows the single ETVR/Babble switch on Tracking Debug). A source that stops streaming falls back automatically and shows red above."
+                               FontSize="11"
+                               Foreground="{ThemeResource TextFillColorTertiaryBrush}"
+                               TextWrapping="Wrap"/>
+                </StackPanel>
+            </Border>
+
+            <!-- Tobii bridge : blue -->
+            <Border Style="{StaticResource Cat518SectionBorderStyle}"
+                    Background="{StaticResource Cat518BlueTint}"
+                    BorderBrush="{StaticResource Cat518BlueEdge}">
+                <StackPanel Spacing="6">
+                    <TextBlock Text="Tobii bridge"
+                               FontWeight="SemiBold"
+                               Foreground="{StaticResource Cat518Blue}"/>
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="1*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <RadioButtons MaxColumns="2"
+                                      SelectedIndex="{x:Bind ViewModel.BridgeIndex, Mode=TwoWay}">
+                            <RadioButton Content="SRanibro" MinWidth="0"/>
+                            <RadioButton Content="BrokenEye" MinWidth="0"/>
+                        </RadioButtons>
+                        <TextBlock Grid.Column="1" Margin="16,0,16,0"
+                                   Text="Only one can run: both take the headset's eye tracker. Switching ends the other one and starts the selected one."
+                                   FontSize="11"
+                                   Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                   TextWrapping="Wrap"
+                                   VerticalAlignment="Center"/>
+                        <Button Grid.Column="2"
+                                VerticalAlignment="Center"
+                                Click="{x:Bind ViewModel.RestartBridge}"
+                                ToolTipService.ToolTip="End the selected bridge and start it again - fixes a bridge that started before Pimax's runtime had the eye tracker">
+                            <TextBlock Text="Restart eye bridge" FontWeight="Bold"/>
+                        </Button>
+                    </Grid>
+                    <TextBlock Text="{x:Bind ViewModel.BridgeActionText, Mode=OneWay}"
+                               FontSize="12"
+                               TextWrapping="Wrap"/>
+                    <TextBlock Text="{x:Bind ViewModel.BridgeText, Mode=OneWay}"
+                               FontFamily="Consolas" FontSize="12"
+                               TextWrapping="Wrap"/>
+                    <TextBlock Text="{x:Bind ViewModel.WatchdogText, Mode=OneWay}"
+                               FontFamily="Consolas" FontSize="11"
+                               Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                               TextWrapping="Wrap"/>
+                    <TextBlock Text="{x:Bind ViewModel.CameraUrlsText, Mode=OneWay}"
+                               FontSize="11"
+                               Foreground="{ThemeResource TextFillColorTertiaryBrush}"
+                               TextWrapping="Wrap"/>
+                    <TextBlock Text="With the Pimax connected, the selected bridge is started automatically, and restarted when it runs without the eye tracker (up to 3 times per headset connection)."
+                               FontSize="11"
+                               Foreground="{ThemeResource TextFillColorTertiaryBrush}"
+                               TextWrapping="Wrap"/>
+                </StackPanel>
+            </Border>
+
+            <!-- Status : yellow -->
+            <Border Style="{StaticResource Cat518SectionBorderStyle}"
+                    Background="{StaticResource Cat518YellowTint}"
+                    BorderBrush="{StaticResource Cat518YellowEdge}">
+                <StackPanel Spacing="4">
+                    <TextBlock Text="Status"
+                               FontWeight="SemiBold"
+                               Foreground="{StaticResource Cat518Yellow}"/>
+                    <TextBlock Text="{x:Bind ViewModel.ModuleStateText, Mode=OneWay}"
+                               FontFamily="Consolas" FontSize="12"
+                               TextWrapping="Wrap"/>
+                    <TextBlock Text="{x:Bind ViewModel.SlotText, Mode=OneWay}"
+                               FontFamily="Consolas" FontSize="12"
+                               TextWrapping="Wrap"/>
+                    <TextBlock Text="{x:Bind ViewModel.SourcesText, Mode=OneWay}"
+                               FontFamily="Consolas" FontSize="11"
+                               Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                               TextWrapping="Wrap"/>
+                    <TextBlock Text="{x:Bind ViewModel.CapabilityText, Mode=OneWay}"
+                               FontSize="11"
+                               Foreground="{StaticResource Cat518Yellow}"
+                               TextWrapping="Wrap"
+                               Visibility="{x:Bind ViewModel.CapabilityVisibility, Mode=OneWay}"/>
+                </StackPanel>
+            </Border>
+        </StackPanel>
+    </ScrollViewer>
+</Page>

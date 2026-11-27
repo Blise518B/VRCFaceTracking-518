@@ -86,6 +86,16 @@
                         <FontIcon FontFamily="{StaticResource SymbolThemeFontFamily}" Glyph="&#xE957;"/>
                     </NavigationViewItem.Icon>
                 </NavigationViewItem>
+                <!-- Pimax only: ShellPage shows it once this PC has the eye module or a Pimax -->
+                <NavigationViewItem x:Name="DreamAirEyesNavItem"
+                                    Visibility="Collapsed"
+                                    Content="Dream Air Eyes"
+                                    ToolTipService.ToolTip="Which eye-tracking variation drives the avatar right now - switch with one click; Tobii bridge (SRanibro / BrokenEye)"
+                                    helpers:NavigationHelper.NavigateTo="VRCFaceTracking.ViewModels.DreamAirEyesViewModel">
+                    <NavigationViewItem.Icon>
+                        <FontIcon FontFamily="{StaticResource SymbolThemeFontFamily}" Glyph="&#xE7B3;"/>
+                    </NavigationViewItem.Icon>
+                </NavigationViewItem>
                 <NavigationViewItem Content="Tracking Debug"
                                     ToolTipService.ToolTip="Live view of every unified expression shape: value, source, and update activity"
                                     helpers:NavigationHelper.NavigateTo="VRCFaceTracking.ViewModels.TrackingDebugViewModel">

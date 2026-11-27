@@ -4,8 +4,10 @@ using Microsoft.UI.Xaml.Input;
 using Microsoft.UI.Xaml.Media;
 
 using VRCFaceTracking.Contracts.Services;
+using VRCFaceTracking.Core.Services;
 using VRCFaceTracking.Core.Services.Updates;
 using VRCFaceTracking.Helpers;
+using VRCFaceTracking.Services;
 using VRCFaceTracking.ViewModels;
 
 using Windows.System;
@@ -69,6 +71,62 @@ public sealed partial class ShellPage : Page
         LiteConsoleNavItem.Visibility = ModeSwitcher.LiteAvailable
             ? Visibility.Visible
             : Visibility.Collapsed;
+
+        _ = WatchForDreamAirAsync();
+    }
+
+    /// <summary>
+    /// Whether the Dream Air Eyes page is in the sidebar. It only does something with a Pimax
+    /// Dream Air and the DreamAir518 eye module, so it stays out of everyone else's sidebar.
+    /// </summary>
+    public static bool DreamAirEyesShown { get; private set; }
+
+    private static bool _dreamAirWatchRunning;
+
+    /// <summary>
+    /// Shows Dream Air Eyes once this PC has the eye module (its routing file in CustomLibs) or
+    /// SteamVR reports a Pimax, then stays for the session. Until then it looks every 10 s:
+    /// SteamVR or the headset often come up after the app. Both checks run off the UI thread
+    /// (a folder search and an OpenVR call).
+    /// </summary>
+    private async Task WatchForDreamAirAsync()
+    {
+        if (DreamAirEyesShown)
+        {
+            DreamAirEyesNavItem.Visibility = Visibility.Visible;
+            return;
+        }
+
+        if (_dreamAirWatchRunning)
+        {
+            return;
+        }
+
+        _dreamAirWatchRunning = true;
+        while (!DreamAirEyesShown)
+        {
+            bool found;
+            try
+            {
+                found = await Task.Run(() =>
+                    DreamAirModuleLink.ModuleInstalled() || CompanionAppService.ActiveHmdIsPimax() == true);
+            }
+            catch (Exception)
+            {
+                found = false;
+            }
+
+            if (found)
+            {
+                DreamAirEyesShown = true;
+                DreamAirEyesNavItem.Visibility = Visibility.Visible;
+                break;
+            }
+
+            await Task.Delay(TimeSpan.FromSeconds(10));
+        }
+
+        _dreamAirWatchRunning = false;
     }
 
     /// <summary>

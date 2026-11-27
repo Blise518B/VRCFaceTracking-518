@@ -62,6 +62,11 @@ public class ModuleHotSwapService : IDisposable
         {
             WatchHmdChange();
 
+            // Keep the Dream Air's Tobii bridge alive: (re)start it when it is missing or
+            // runs without a tracker. Pimax-gated and rate-limited inside; this timer
+            // thread is never the tracking thread.
+            _companions.CheckBridge();
+
             if (!_activation.GatingEnabled || _reinitInFlight)
             {
                 return;

@@ -171,6 +171,8 @@ public partial class App : Application
             services.AddTransient<CurvesPage>();
             services.AddSingleton<TrackingDebugViewModel>();
             services.AddTransient<TrackingDebugPage>();
+            services.AddSingleton<DreamAirEyesViewModel>();
+            services.AddTransient<DreamAirEyesPage>();
             services.AddSingleton<UtilitiesViewModel>();
             services.AddTransient<UtilitiesPage>();
             services.AddSingleton<VrcOutputViewModel>();
