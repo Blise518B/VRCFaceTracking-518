@@ -9,6 +9,9 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 **Cutting a release** (GitHub builds it; nothing is uploaded by hand)
 1. Bump `<Fork518Version>` in `Directory.Build.props` and turn `[Unreleased]` below into
    `## [X.Y.Z] - date`. That section becomes the release notes word for word.
+   Put the few changes a user would notice at the top of `WhatsNew.Releases`
+   (`VRCFaceTracking.Core/Services/Updates/WhatsNew.cs`), under the same version: that is
+   what the app shows after updating.
 2. Commit and push `master`. The Build workflow builds every push, so check it went green.
 3. Tag and push the tag: `git tag 518-vX.Y.Z` then `git push origin 518-vX.Y.Z`.
    GitHub Actions builds again, checks the tag matches `<Fork518Version>` and that this
@@ -25,6 +28,57 @@ The two file names never change: the README's download button points at
 ---
 
 ## [Unreleased]
+
+## [1.4.0] - 2026-11-27
+Based on upstream VRCFaceTracking 5.4.5. From this version on, the app tells you what changed
+after an update.
+
+### Fixed
+- **Face tracking no longer stops after switching avatars quickly.** VRChat doesn't always say
+  when you switch avatars: on 2026-11-27 it sent nothing for a switch back to a native face
+  tracking avatar, and the app stayed on the avatar before, sending parameters the new one
+  doesn't read, until the next switch. The app now asks VRChat every 3 seconds which avatar is
+  on and loads it if it isn't the one it has. After a switch it waits 1.5 seconds for VRChat to
+  finish setting the avatar up, reads it again while VRChat still shows the old one, and loads
+  one avatar at a time, so a quick back-and-forth can't end on the wrong one. The log names
+  every avatar it loads and says when VRChat switched without telling.
+- **Switching pages no longer waits behind VRChat's parameter stream.** Everything VRChat
+  sends back (every avatar parameter change, about 2,000 a second with a native face tracking
+  avatar) arrives twice: directly, and through OSC Router 518. The router copy was handled on
+  the window's own thread, which woke about 4,000 times a second for it and used a fifth of a
+  core while the app sat idle. Clicks such as Module Registry or VRChat Output queued behind
+  that, and when Process Lasso lowered the app's priority the window could hang for seconds.
+  The router copy is now handled in the background, like the direct one.
+- **A stalled tracker no longer freezes a native face tracking avatar's face.** On an avatar
+  that uses VRChat's native face tracking, the app kept sending the last face it had after the
+  tracker stopped (headset off, Virtual Desktop paused, a tracking app closed). The avatar froze,
+  maybe with its eyes shut or mouth open, and VRChat never went back to its own eye movement
+  and blinking. Now, about half a second after the last new tracking data, the app sends one
+  relaxed face and then nothing until tracking returns, which lets VRChat take the face back.
+  If the tracking module stops, it does this at once. The log says when it pauses and
+  resumes.
+
+### Added
+- **What's new after an update.** The first start after an update opens a short window with
+  what changed, one page per version (Back and Next when an update skipped some), and a
+  **Take me there** button for changes that have a place in the app. A new install doesn't show
+  it. Settings, Updates, **What's new** opens it again.
+- **The log says when the window freezes, and why.** A line from `UiWatch` names the page,
+  how long the window did not respond and whether it was busy, paused by a garbage collection
+  or waiting for CPU at low priority. Once a minute a Debug line says how busy the window's
+  thread was.
+- **Dream Air Eyes page.** Shows in big letters which eye-tracking variation drives the avatar
+  right now and where lids, wide eyes, squint and brows each come from (SRanibro, Babble, ETVR
+  or Tobii), with one-click variations and a per-signal switch. Needs the DreamAir eye module
+  build with the eye mix. It also warns when the Babble module holds the eye slot and fixes that
+  with one button. The page is in the sidebar only on a PC with a Pimax headset or the
+  DreamAir eye module.
+- **SRanibro as the Dream Air's Tobii bridge**, next to BrokenEye: pick one on the Dream Air Eyes
+  page. Only the chosen one is started, before the camera apps.
+- **The Tobii bridge starts again on its own.** While the Pimax is connected, a bridge that isn't
+  running is started, and one that runs without the eye tracker (it started before Pimax's
+  runtime had it) is restarted, up to three times per headset connection. A Restart eye bridge
+  button does the same by hand.
 
 ## [1.3.0] - 2026-11-19
 Based on upstream VRCFaceTracking 5.4.5. Modules built for VRCFaceTracking 6.0, such as

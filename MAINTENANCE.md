@@ -68,6 +68,21 @@ These are load-bearing. Breaking one produces a symptom that looks like
    finalizer queue: VRChat echoes thousands of messages a second, and as finalizable
    objects they kept the GC busy on their own. A handler that needs a value later
    must copy it out (`msg.Value`) while it runs; afterwards `Value` is null.
+12. **Native face tracking stops when tracking stalls.** `NativeFaceTrackingSender`
+   sends one neutral blob and then nothing once no module has delivered new data
+   for 500 ms (`NativeFrameGate`), so VRChat can take the face back. Repeating the
+   last frame instead froze the avatar's face. New data is a frame that changes a
+   value its module's slot carries (`ReplyUpdatePacket.TrackingChanged`), never a
+   packet arriving: module processes answer every poll with their last values,
+   stalled or not. Keep the five-tick grace too. Our own GC pauses stop the receive
+   thread with the send loop, and without it each pause over 500 ms would flash a
+   neutral face. `tools/native-ft-stall-check` checks all three.
+13. **Every avatar load goes through `AvatarSync`.** A load re-maps every parameter
+   (`ResetParam`, global state), so two at once race and the last to finish wins, older or
+   not. Hand changes to `AvatarSync.Request`; don't call `OscQueryConfigParser.LoadAvatar`
+   from anywhere else. And don't rely on `/avatar/change` alone: VRChat skips it now and then,
+   which is what the 3 s check is for (FORK-NOTES.md, "Avatar changes").
+   `tools/avatar-sync-check` checks it.
 
 ---
 

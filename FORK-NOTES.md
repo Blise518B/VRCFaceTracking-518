@@ -258,6 +258,8 @@ Design rules:
 
 - **Launch-only.** Nothing is monitored, restarted, or killed. Quitting an app mid-session
   (e.g. swapping EyeTrackVR for Baballonia to A/B compare eye tracking) is never fought.
+  The one exception is the Dream Air's Tobii bridge (see "Tobii bridge choice and
+  watchdog" below), and only while the Pimax is SteamVR's headset.
 - **Never double-starts.** If the configured exe already has a process, the button reports
   "already running" instead of launching a second copy.
 - Exe launches get their working directory set to the exe's folder (apps like BrokenEye load
@@ -290,6 +292,39 @@ apps → modules auto-activate.
 Also added a **BrokenEye (Dream Air Tobii bridge)** entry to the known tracking sources
 (process names `BrokenEye`/`BrokenEyeApp`), and the Baballonia process names to the Project
 Babble entry — so both detect properly and can carry launch buttons.
+
+### Tobii bridge choice and watchdog
+
+`CompanionAppService` (bridge API + `CheckBridge`), `TobiiBridgeProbe`, UI on the **Dream Air
+Eyes** page. Two apps can bridge the Dream Air's Tobii tracker: **BrokenEye** (archived upstream
+in August 2026) and **SRanibro** (challenger0303; has its own eyelid / wide / eyebrow model).
+Both serve the same BrokenEye-framed TCP API on `127.0.0.1:5555`, and both take the tracker, so
+only one may run.
+
+- **Choice.** Setting `TobiiBridge` = `sranibro` | `brokeneye`; until picked, SRanibro when it is
+  configured or can be found, else BrokenEye. The startup / headset-change launch pass starts
+  only the selected bridge, starts it **before** the camera apps (they read their eye images
+  from it), and never starts a bridge while the other one's process runs (logged). The page's
+  switch ends the other bridge and starts the selected one. SRanibro's source entry is
+  process-based (`SRanibro*`); its executable is found like the others, plus next to the
+  already-configured companion apps (people keep these tools in one folder). `recorder` joined
+  the not-the-tracking-app words because SRanibro ships a recorder exe beside itself.
+- **The 5555 probe is bridge-aware.** BrokenEye only streams once it has the tracker, so any
+  frame counts. SRanibro writes all-invalid frames at 120 Hz even with no headset; its frames
+  only count when an eye value is valid or SteamVR's headset is a Pimax - otherwise a forgotten
+  SRanibro would start the Dream Air module on a Quest Pro day. SRanibro is recognised by its
+  `noise_filter_samples` / `sranipal_brow_link` fields or a two-value `gaze_direction`.
+- **Watchdog** (`CheckBridge`, from the hot-swap timer every 10 s, never the tracking thread).
+  Only while SteamVR's headset is a Pimax and the selected bridge has a command and auto-launch:
+  not running -> launch it; running but not delivering -> end it and start it again. Healthy
+  means BrokenEye frames, or for SRanibro a valid eye value or a real image from its camera
+  server `http://127.0.0.1:5556/left.jpg` (503 "No eye frame" = no tracker; 503 "Too many
+  eye-image clients" = streaming). 45 s grace after every launch, 60 s between actions, at most
+  3 per headset connection (reset when the headset changes), each logged. It exists for the
+  failure measured 2026-11-24: BrokenEye started at 15:42 found `devices=[]`, Pimax's runtime
+  only had the tracker at 15:49, and BrokenEye never looked again. Kills only processes whose
+  name matches the selected bridge. **Restart eye bridge** on the page does the same by hand,
+  with a fresh budget.
 
 ---
 
@@ -325,6 +360,42 @@ command channel (the same mechanism ETVR's GUI uses for settings), so the change
 instant, restart-free, and persisted by the module itself. The selector reflects the
 mode back from the routing file (2 s grace after a click so the lagging file can't
 snap it back); it disables itself when the module doesn't publish routing info.
+When the module publishes an eye mix, a purple **EYE MIX: ...** badge sits next to it and
+the routing line adds the mix's active sources.
+
+### Dream Air Eyes page (eye mix)
+
+`VRCFaceTracking/Views/DreamAirEyesPage.xaml` + `ViewModels/DreamAirEyesViewModel.cs`,
+module link in `VRCFaceTracking/Services/DreamAirModuleLink.cs`
+
+The DreamAir518 module can take each eye signal from a different app: **lids**, **wide**,
+**squint** and **brows** each from SRanibro, Babble or ETVR (lids also Tobii's blink-only
+openness, the others also off; `auto` = the old single ExpressionSource switch). Gaze and
+pupil stay Tobii. This page is the one place to see and switch it:
+
+- **NOW banner**: the variation in force (preset name, else "Custom mix") and four big chips
+  with the source *actually* driving each signal, in its identity hue (SRanibro purple, Babble
+  yellow, ETVR cyan, Tobii blue). A chip whose chosen app isn't streaming gets a red edge and
+  "... not streaming -> fallback" (the module reports that in `Fallback`).
+- **Variations**: one-click presets A-E (A SRanibro eyes + Babble squint, B SRanibro eyes +
+  ETVR squint, C Babble only, D ETVR only, E Legacy auto), sent as one atomic
+  `/command/set/Mix "lids=...;wide=...;squint=...;brows=...;name=..."` (E adds
+  `expression=auto`). **Per signal** radio rows send `/command/set/MixLids` etc. Same 2 s grace
+  as the expression switch.
+- **Tobii bridge**: SRanibro / BrokenEye switch, Restart eye bridge, the watchdog's verdict and
+  which camera URLs the camera apps need for the selected bridge.
+- **Eye-slot guard**: when the Babble face module holds the eye slot (or its `BabbleConfig.json`
+  says `IsEyeSupported: true`, which lets it grab the slot at the next start), a red section
+  offers **Make Babble face-only**: rewrites that file (other properties kept, one-time backup
+  `BabbleConfig.json.bak-eyemix`) and restarts tracking like the Sources page button. Measured
+  need: the Babble module 4.0.0 update set eye support on and silently took the eye slot from
+  the DreamAir module. Careful when matching names: the DreamAir module's own display name
+  mentions Babble, so it is told apart by "DreamAir" / `ETVRTrackingModule`.
+
+Routing-file fields the page reads (added by the module next to the old ones): `Bridge`,
+`BridgeLive`, `MixLids/Wide/Squint/Brows`, `MixName`, `ActiveLids/Wide/Squint/Brows`,
+`Fallback`, `SranibroLive`, `BabbleLive`, `EtvrLive`, `SranibroHasWide/Squint/Brows`.
+Refreshes at 4 Hz while shown; process and file checks run every 2 s on a worker thread.
 
 ---
 
@@ -370,7 +441,8 @@ any synced parameters. This feeds it the way upstream 6.0 does, ported onto the 
 
 - **Detection.** VRChat's OSCQuery marks such an avatar with `/avatar/avatarfullfacetracking`
   (`IAvatarInfo.FullFaceTracking`; `fullFaceTracking` in the OSC config JSON counts too).
-- **Sending.** For those avatars every tracking tick sends `/tracking/face/v1`: one blob of
+- **Sending.** For those avatars every tracking tick sends `/tracking/face/v1` while tracking
+  data is fresh (see "When tracking stalls" below): one blob of
   exactly 102 bytes, one byte per key (value x 255), in VRChat's fixed order. First the 14 eye
   keys (look in/out/up/down per eye from gaze, closed from openness, dilation and constriction
   from pupil size around 5 mm), then the 88 expressions in `UnifiedExpressions` order. It is
@@ -394,9 +466,117 @@ Not verified against VRChat yet: the eye-look scale. Gaze goes out as its raw ta
 to 0-1 (1 = 45 degrees), the same as upstream; VRChat doesn't document what angle
 `EyeLook* = 1` stands for.
 
+### When tracking stalls
+
+`VRCFaceTracking.Core/Services/NativeFrameGate.cs`, `TrackingFreshness.cs`,
+`ReplyUpdatePacket.TrackingChanged`, `UnifiedLibManager.ApplyTrackingFrame`
+
+VRChat shows the face the blobs carry. The sender used to repeat the last frame every tick
+after the tracker had stopped, so the face froze, maybe with the eyes shut or the mouth
+open, and VRChat never went back to its own eye look and blinking: `UserEyeTracking` and
+`UserFaceTracking` stayed true. Now, once no module has delivered new data for 500 ms, the
+sender sends one neutral blob (all 102 bytes 0: eyes open and straight ahead, pupils at rest,
+everything relaxed) and then nothing until new data arrives. About 2 s after the last
+datagram VRChat takes the face back itself (measured, see below). Gaze stays raw tangent and
+`EyeTrackingActive`/`LipTrackingActive` still don't go to native avatars; neither changed.
+
+- **New data means a changed value, not a packet.** A module process answers every update
+  poll with whatever its module last wrote, so a stalled tracker keeps delivering its last
+  frame 100 times a second. A frame counts only when it changes, bit for bit against the same
+  module's previous frame, a value that module's slot carries. For the eye slot those are
+  gaze, openness, pupil and the eye-region shapes; for the face slot, the expressions. The
+  head pose doesn't count: it keeps moving with the headset while the face tracker inside it
+  has stopped. A module's first frame doesn't count either, so a respawned module's start-up
+  defaults don't bring a frozen face back. This assumes a running tracker never repeats all of
+  its floats exactly for half a second; a still face still moves their last bits.
+- **Five ticks of grace.** Our own GC pauses stop the IPC receive thread together with the
+  send loop. The 2026-11-08 log has them at 150-810 ms, several a minute, so a plain 500 ms
+  timer would flash a neutral face after every long one. The data has to look stale on five
+  ticks in a row, which gives the receive thread about 50 ms to work through the frames that
+  queued up meanwhile. A real stall pauses about 550 ms after the last new frame.
+- **A lost module pauses at once.** When the last module holding a slot dies, or all modules
+  are torn down, `TrackingFreshness.MarkLost()` pauses on the next tick instead of after the
+  timeout. Modules themselves can't report lost tracking: the module SDK has no way to say so.
+  A module the user switches off counts as stalled.
+- **A new avatar starts clean.** Nothing is sent to a native avatar loaded while tracking is
+  stale, and no neutral blob either; the first new frame starts it. The legacy parameter path
+  doesn't use any of this.
+
+The log says `Native face tracking paused: ...` with the reason and `... resumed after N s`.
+`tools/native-ft-stall-check` checks all of it offline (README there): the gate on a
+synthetic clock, which frames count, and the real pipeline into a loopback socket.
+
+Checked in VRChat on 2026-11-08 with a Quest Pro over Virtual Desktop and the
+`B V8 E - Native Echo 1 Rebuild` avatar (Eye Look on). The module process was frozen
+(`NtSuspendProcess`) for 8 s and then for 2 s while osc-capture recorded both directions:
+
+- Each freeze sent one neutral blob 542-544 ms in, then nothing. Blobs resumed 23-26 ms after
+  the module did.
+- VRChat set `UserFaceTracking` false 2.0 s after the last blob, and true again 8 ms after the
+  first new one. The short freeze's 1.5 s gap never dropped it. VRChat sent no
+  `UserEyeTracking` for this avatar.
+- In the mirror the face relaxed, then VRChat's own eye movement and blinking took over until
+  tracking came back. So for the first 2 s it is the neutral blob that relaxes the face.
+
+Still unchecked in VRChat: a tracker that stalls while its module keeps answering (headset
+off, Virtual Desktop paused). A frozen process sends nothing at all, so only the offline check
+covers the value comparison. Also unchecked: whether Steam Link and DreamAir518 repeat their
+values exactly when their tracker stops, and never for half a second while it runs; and false
+pauses late in a long session, when our own GC pauses have grown (350 ms and more after
+12 hours on 2026-11-08).
+
 Upstream counterparts, for later syncs: `BinaryFaceDataSender` and `UnifiedTrackingData.CopyTo`
 (merged with the Avalonia rewrite, PR #372), the pupil bytes from PR #395, `/avatar/name` from
 PR #393.
+
+### Avatar changes
+
+`VRCFaceTracking.Core/Services/AvatarSync.cs`, `OscQueryConfigParser.LoadAvatar` and
+`ReadCurrentAvatarId`
+
+Upstream loads an avatar when VRChat's `/avatar/change` OSC message comes in, and only then: it
+reads the whole `/avatar` tree at once and ignores the id the message named, and every message
+starts its own load. On 2026-11-27, after quick switches between an avatar with face tracking
+parameters and one with native face tracking, VRChat sent no `/avatar/change` for the last
+switch back to the native one. The app stayed on the parameter avatar: native face tracking
+off, its 166 parameters going to an avatar that doesn't read them, until the next switch. Nothing was disconnected. That VRChat
+sent no message, rather than one getting lost, shows in OscGoesPurrr's log (its own receiver
+on a direct VRChat link has no "Avatar changed" line for that switch either) and in OSC Router
+518's counters (both of its inputs had received exactly the same number of datagrams). VRChat's
+own log looks the same for that switch as for the ones that worked.
+
+`OscQueryService` now hands every change to `AvatarSync`, which runs all loads on one worker:
+
+- **One load at a time.** A load re-maps every parameter (global state). Upstream's loads
+  overlapped, and whichever finished last won, older or not.
+- **Settle first.** A load starts once no change came for 1.5 s (at most 5 s after the first,
+  for changes that never stop). VRChat sends `/avatar/change` about half a second before its tree
+  has the new avatar's parameters: its log registers the avatar's OSC endpoints at the second
+  "Avatar is Ready", about a second after the switch. The wait also folds VRChat's doubled
+  messages into one load. OscGoesPurrr waits 1.5 s the same way. The first load after VRChat is
+  discovered doesn't wait.
+- **The tree must show the avatar named.** If its `/avatar/change` node still shows another
+  avatar, nothing is applied (`AvatarLoadOutcome.Stale`) and the tree is read again every
+  second, up to 4 times. After that, what VRChat shows is used: the change it named may never
+  have finished. A newer change waiting ends the retries at once.
+- **Check every 3 s.** `GET /avatar/change` (a couple of hundred bytes, not the 250 KB tree).
+  When it names another avatar than the one loaded and no load is waiting, a load goes through
+  the same settle wait. If the message comes in that window, it was an ordinary change.
+  Otherwise the log says `VRChat switched to avatar ... without an /avatar/change message`.
+  Loads the check started that keep failing back off (3 s, doubling, up to 60 s); a message
+  always loads.
+- **Timeouts.** The tree read gives up after 10 s (upstream's HttpClient default was 100 s, a
+  long time to hold the only worker), the id read after 2 s.
+- **The log names every avatar**: `Avatar loaded: <name> (<id>), native face tracking` or
+  `..., N parameters`. Before, only native face tracking avatars were logged by id.
+
+Plain OSC (VRChat never found over mDNS) reads VRChat's OSC config file by the id in the
+message, through the same worker, with nothing to check against.
+
+`tools/avatar-sync-check` checks all of it offline against a scripted VRChat and a fake OSCQuery
+server, and with `--live <port>` reads a running VRChat (README there). Not checked in VRChat
+yet: a switch back and forth with the new build, and how often the check finds a switch VRChat
+didn't announce.
 
 ---
 
@@ -449,6 +629,34 @@ for its parent, an unrelated file in the install folder kept, a path with a spac
 non-ASCII letters, and a file locked for writing making robocopy fail and the backup come
 back. The real path from one published release to the next can only be tried once a second
 release exists.
+
+### What's new
+
+`VRCFaceTracking.Core/Services/Updates/WhatsNew.cs` (content and rule),
+`VRCFaceTracking/Views/WhatsNewDialog.cs` (the window), since 1.4.0
+
+The update banner's "What's new" button opens the GitHub release of a version not installed
+yet. After the update, the app itself says what changed, the way OscGoesPurrr does it (and as
+`_hub\ui-style.md` asks of every 518 app that updates itself):
+
+- **Once, at the first start after an update**, about 2 s after the window is up: a dialog with
+  one page per version, newest first, Back / Next when an update skipped some. Each change is a
+  title and a sentence or two; one that has a place in the app gets **Take me there**, which
+  closes the dialog and opens it (Settings scrolls to the Updates card, opens it and pulses it).
+- **The rule** (`WhatsNew.OnLaunch`): the setting `WhatsNewSeenVersion` remembers the newest
+  version whose notes this install has had. Only versions newer than that and not newer than
+  this build are shown. No settings file at startup (`LocalSettingsService.HadSettingsFile`)
+  means a first install: nothing shows, but the marker is set, so its first update shows only
+  that update's news. An install from before 1.4.0 has no marker and gets every release this
+  build has notes for. The marker is written before the dialog opens, so nothing shows twice.
+- **Changes about the Dream Air Eyes page** are left out unless that page is in the sidebar
+  (`OnlyWithTarget`), which it is only on a PC with a Pimax headset or the DreamAir eye module.
+- **Settings, Updates, What's new** opens it again with every release this build has notes for.
+- **Content**: `WhatsNew.Releases`, newest at the top, only what a user would notice;
+  CHANGELOG.md stays the full list. Step 1 of "Cutting a release" in CHANGELOG.md says so.
+
+`tools/whats-new-check` checks the rule offline. The Lite console has no window: a start in
+Lite leaves the marker alone, so the next start of the full app still shows the notes.
 
 ---
 
