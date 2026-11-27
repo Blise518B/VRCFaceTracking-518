@@ -228,6 +228,14 @@ public class UnifiedLibManager : ILibManager
             ExpressionStatus = ModuleState.Uninitialized;
         }
 
+        // Nothing is left to deliver tracking: let native face tracking hand the face back
+        // now rather than after its stale timeout. A module that still holds a slot keeps
+        // it going, so only the last one out says so.
+        if ( EyeStatus != ModuleState.Active && ExpressionStatus != ModuleState.Active )
+        {
+            TrackingFreshness.MarkLost();
+        }
+
         if ( exitCode == 0 )
         {
             // Graceful self-exit (e.g. failed init) - don't resurrect
@@ -1103,11 +1111,29 @@ public class UnifiedLibManager : ILibManager
             return;
         }
 
-        if ( module.ModuleInformation.UsingEye )
+        ApplyTrackingFrame(module, packet);
+    }
+
+    /// <summary>
+    /// Writes one frame from <paramref name="module"/> into the shared tracking data, for the
+    /// slots it owns, and marks tracking fresh when the frame changed one of those values
+    /// (see <see cref="TrackingFreshness"/>). IPC receive thread only.
+    /// </summary>
+    public static void ApplyTrackingFrame(ModuleRuntimeInfo module, ReplyUpdatePacket packet)
+    {
+        var eye = module.ModuleInformation.UsingEye;
+        var expression = module.ModuleInformation.UsingExpression;
+
+        if ( packet.TrackingChanged(ref module.LastTrackingFrame, eye, expression) )
+        {
+            TrackingFreshness.MarkFresh();
+        }
+
+        if ( eye )
         {
             packet.UpdateGlobalEyeState();
         }
-        if ( module.ModuleInformation.UsingExpression )
+        if ( expression )
         {
             packet.UpdateGlobalExpressionState();
         }
@@ -1361,6 +1387,7 @@ public class UnifiedLibManager : ILibManager
 
         EyeStatus = ModuleState.Uninitialized;
         ExpressionStatus = ModuleState.Uninitialized;
+        TrackingFreshness.MarkLost();
     }
 
     /// <summary>

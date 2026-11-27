@@ -61,6 +61,53 @@ public class ReplyUpdatePacket : IpcPacket
     // with none of that.
     private readonly float[] _staging = new float[HEADER_FLOATS + EXPRESSION_COUNT];
 
+    // Where the values each slot owner writes sit in a frame (see UpdateGlobalEyeState and
+    // UpdateGlobalExpressionState): both eyes' gaze, pupil and openness, then the shapes.
+    private const int EYE_VALUES_START = 2;
+    private const int EYE_VALUES_COUNT = 8;
+    private const int EYE_SHAPES_START = HEADER_FLOATS + (int)UnifiedExpressions.EyeSquintRight;
+    private const int EYE_SHAPES_COUNT = UnifiedExpressions.BrowOuterUpLeft - UnifiedExpressions.EyeSquintRight + 1;
+    private const int FACE_SHAPES_START = HEADER_FLOATS + (int)UnifiedExpressions.BrowOuterUpLeft;
+    private const int FACE_SHAPES_COUNT = EXPRESSION_COUNT - (int)UnifiedExpressions.BrowOuterUpLeft;
+
+    /// <summary>
+    /// Whether this frame changes a tracking value its module owns: the eye values when it holds
+    /// the eye slot (<paramref name="eye"/>), the expression shapes when it holds the face slot
+    /// (<paramref name="expression"/>). <paramref name="previous"/> keeps the same module's last
+    /// frame and is overwritten with this one. A module's first frame only fills it, so the
+    /// defaults a module process starts with never count as tracking.
+    /// </summary>
+    /// <remarks>
+    /// Module processes answer every update poll with whatever their module last wrote, so a
+    /// stalled tracker repeats its last values exactly. Hence the comparison is bit for bit (a
+    /// NaN that stays NaN is no change), and the head pose doesn't count: it keeps moving with
+    /// the headset while the face tracker in it has stopped. Each module is compared with its
+    /// own previous frame, not with the shared data, which two modules both write
+    /// (BrowOuterUpLeft is in both slots' ranges). IPC receive thread; allocation-free after
+    /// the first frame.
+    /// </remarks>
+    public bool TrackingChanged(ref float[]? previous, bool eye, bool expression)
+    {
+        var current = _staging; // the frame Decode just read
+        if ( previous == null )
+        {
+            previous = (float[])current.Clone();
+            return false;
+        }
+
+        var changed =
+            ( eye && ( Differs(current, previous, EYE_VALUES_START, EYE_VALUES_COUNT) ||
+                       Differs(current, previous, EYE_SHAPES_START, EYE_SHAPES_COUNT) ) ) ||
+            ( expression && Differs(current, previous, FACE_SHAPES_START, FACE_SHAPES_COUNT) );
+
+        current.AsSpan().CopyTo(previous);
+        return changed;
+    }
+
+    private static bool Differs(float[] current, float[] previous, int start, int count) =>
+        !MemoryMarshal.AsBytes(current.AsSpan(start, count))
+            .SequenceEqual(MemoryMarshal.AsBytes(previous.AsSpan(start, count)));
+
     public override byte[] GetBytes()
     {
         var f = _staging;

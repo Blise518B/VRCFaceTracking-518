@@ -71,6 +71,13 @@ public class ModuleRuntimeInfo
     public bool OfferedEye, OfferedExpression;
 
     /// <summary>
+    /// The module's previous tracking frame, for telling a live tracker from one that repeats
+    /// its last values (<see cref="Sandboxing.IPC.ReplyUpdatePacket.TrackingChanged"/>). Null
+    /// until its first frame. IPC receive thread only.
+    /// </summary>
+    public float[]? LastTrackingFrame;
+
+    /// <summary>
     /// Queue of packets to send
     /// </summary>
     public Queue<QueuedPacket> EventBus;

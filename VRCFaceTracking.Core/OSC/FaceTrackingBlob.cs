@@ -48,6 +48,12 @@ public sealed class FaceTrackingBlob
     /// <summary>Rewrites the payload from <paramref name="data"/>. Allocation-free.</summary>
     public void Write(UnifiedTrackingData data) => Encode(data, Payload);
 
+    /// <summary>
+    /// Sets every key to 0: eyes open and looking straight ahead, pupils at rest, every
+    /// expression relaxed. Sent once when tracking stalls (see NativeFrameGate).
+    /// </summary>
+    public void WriteNeutral() => Payload.Clear();
+
     public static void Encode(UnifiedTrackingData data, Span<byte> payload)
     {
         var right = data.Eye.Right;
