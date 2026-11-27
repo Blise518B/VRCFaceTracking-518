@@ -37,7 +37,21 @@ public class LocalSettingsService : ILocalSettingsService
         _localSettingsFile = _options.LocalSettingsFile ?? _defaultLocalSettingsFile;
 
         _settings = new Dictionary<string, object>();
+
+        // Checked here, before anything can save: created at startup, this is the moment that
+        // tells a first install (no file yet) from an update (WhatsNew.OnLaunch).
+        try
+        {
+            HadSettingsFile = File.Exists(Path.Combine(_applicationDataFolder, _localSettingsFile));
+        }
+        catch (Exception)
+        {
+            HadSettingsFile = true; // Unknown: an update is the safer guess, it only costs a window
+        }
     }
+
+    /// <summary>Whether a settings file existed when the app started.</summary>
+    public bool HadSettingsFile { get; }
 
     private async Task InitializeAsync()
     {

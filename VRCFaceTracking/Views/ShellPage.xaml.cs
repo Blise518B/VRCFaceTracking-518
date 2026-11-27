@@ -73,6 +73,7 @@ public sealed partial class ShellPage : Page
             : Visibility.Collapsed;
 
         _ = WatchForDreamAirAsync();
+        _ = ShowWhatsNewSoonAsync();
     }
 
     /// <summary>
@@ -127,6 +128,18 @@ public sealed partial class ShellPage : Page
         }
 
         _dreamAirWatchRunning = false;
+    }
+
+    /// <summary>After an update, once the window is up: what changed (WhatsNewDialog).</summary>
+    private async Task ShowWhatsNewSoonAsync()
+    {
+        // A moment for the first page and the Dream Air check, so a "Take me there" to that
+        // page is offered when it exists
+        await Task.Delay(TimeSpan.FromSeconds(2));
+        if (XamlRoot != null)
+        {
+            await WhatsNewDialog.ShowOnLaunchAsync(XamlRoot);
+        }
     }
 
     /// <summary>

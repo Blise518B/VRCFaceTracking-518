@@ -2,6 +2,8 @@ using System.ComponentModel;
 using System.Runtime.InteropServices.WindowsRuntime;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Media.Animation;
+using Microsoft.UI.Xaml.Navigation;
 
 using VRCFaceTracking.ViewModels;
 using Windows.System;
@@ -126,6 +128,14 @@ public sealed partial class SettingsPage : Page, INotifyPropertyChanged
         Unloaded += (_, _) => ViewModel.AutoRestart.RecentEvents.CollectionChanged -= _onRestartEventsChanged;
 
         Loaded += OnPageLoaded;
+        Loaded += (_, _) =>
+        {
+            if (_revealUpdatesOnLoad)
+            {
+                _revealUpdatesOnLoad = false;
+                RevealUpdates();
+            }
+        };
 
         // Subscribe only while the page is showing, with a stored delegate so the
         // unsubscribe actually matches. The old inline `+=` in the constructor meant
@@ -267,6 +277,47 @@ public sealed partial class SettingsPage : Page, INotifyPropertyChanged
 
     private async void ReleasesCard_OnClick(object sender, RoutedEventArgs e)
         => await Launcher.LaunchUriAsync(new Uri(Updates.ReleasesPage));
+
+    private async void WhatsNewCard_OnClick(object sender, RoutedEventArgs e)
+        => await WhatsNewDialog.ShowAllAsync(XamlRoot);
+
+    private bool _revealUpdatesOnLoad;
+
+    protected override void OnNavigatedTo(NavigationEventArgs e)
+    {
+        base.OnNavigatedTo(e);
+        // "Take me there" from What's new; done once the page has loaded
+        _revealUpdatesOnLoad = e.Parameter as string == WhatsNew.TargetUpdates;
+    }
+
+    /// <summary>Opens the Updates card, scrolls to it and lights it up for a moment.</summary>
+    public void RevealUpdates()
+    {
+        UpdatesExpander.IsExpanded = true;
+        // Low priority: after the expand has been laid out, so the scroll lands on the real size
+        DispatcherQueue.TryEnqueue(Microsoft.UI.Dispatching.DispatcherQueuePriority.Low, () =>
+        {
+            UpdatesExpander.StartBringIntoView(new BringIntoViewOptions
+            {
+                VerticalAlignmentRatio = 0.1,
+                AnimationDesired = true,
+            });
+
+            var pulse = new DoubleAnimation
+            {
+                From = 1,
+                To = 0.35,
+                Duration = TimeSpan.FromMilliseconds(280),
+                AutoReverse = true,
+                RepeatBehavior = new RepeatBehavior(2),
+            };
+            Storyboard.SetTarget(pulse, UpdatesExpander);
+            Storyboard.SetTargetProperty(pulse, "Opacity");
+            var storyboard = new Storyboard();
+            storyboard.Children.Add(pulse);
+            storyboard.Begin();
+        });
+    }
 
     private void themeMode_SelectionChanged(object sender, RoutedEventArgs e)
     {

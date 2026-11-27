@@ -258,7 +258,8 @@
                 <!--  About  -->
                 <TextBlock Style="{StaticResource SettingsSectionHeaderTextBlockStyle}" x:Uid="About" />
 
-                <labs:SettingsExpander Header="Updates"
+                <labs:SettingsExpander x:Name="UpdatesExpander"
+                                       Header="Updates"
                                        Description="{x:Bind Updates.StatusText, Mode=OneWay}">
                     <labs:SettingsExpander.HeaderIcon>
                         <FontIcon Glyph="&#xE895;" Foreground="{StaticResource Cat518Green}" />
@@ -281,6 +282,14 @@
                         <labs:SettingsCard Header="Check for updates when VRCFaceTracking starts"
                                            Description="Asks GitHub once per start whether there is a newer release. Nothing installs until you click Update.">
                             <ToggleSwitch IsOn="{x:Bind Updates.CheckOnStartup, Mode=TwoWay}"/>
+                        </labs:SettingsCard>
+                        <labs:SettingsCard Header="What's new"
+                                           Description="What changed in this version and the ones before, as shown after an update."
+                                           IsClickEnabled="True"
+                                           Click="WhatsNewCard_OnClick">
+                            <labs:SettingsCard.ActionIcon>
+                                <FontIcon Glyph="&#xE789;" />
+                            </labs:SettingsCard.ActionIcon>
                         </labs:SettingsCard>
                         <labs:SettingsCard Header="This install"
                                            Description="{x:Bind UpdateInstallText}"/>
