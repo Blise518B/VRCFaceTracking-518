@@ -29,9 +29,16 @@ public partial class OscQueryService(
     [ObservableProperty] private IAvatarInfo _avatarInfo = new NullAvatarDef("Loading...", "Loading...");
     [ObservableProperty] private List<Parameter> _avatarParameters;
 
+    /// <summary>Runs every avatar load, one at a time, and notices changes VRChat didn't announce.</summary>
+    private AvatarSync? _avatarSync;
+
     public async Task InitializeAsync()
     {
         logger.LogDebug("OSC Service Initializing");
+
+        // Before anything can deliver an /avatar/change
+        _avatarSync ??= new AvatarSync(logger, LoadAvatarAsync, oscQueryConfigParser.ReadCurrentAvatarId);
+        _avatarSync.Start();
 
         recvService.OnMessageReceived = HandleNewMessage;
 
@@ -81,45 +88,72 @@ public partial class OscQueryService(
         multicastDnsService.Advertise("_oscjson._tcp", new AdvertisedService("VRCFT-"+randomServiceSuffix, httpPort, IPAddress.Loopback));
         multicastDnsService.Advertise("_osc._udp", new AdvertisedService("VRCFT-"+randomServiceSuffix, recvEndpoint.Port, IPAddress.Loopback));
 
-        HandleNewAvatar();
+        // VRChat is there already, so whatever it has on is ready to read
+        _avatarSync?.Request(null, immediate: true);
     }
 
-    private async void HandleNewAvatar(string newId = null)
+    /// <summary>
+    /// One load, called by AvatarSync only (never two at once). <paramref name="expectedId"/> is
+    /// the avatar the /avatar/change message named, if any.
+    /// </summary>
+    private async Task<AvatarLoadResult> LoadAvatarAsync(string? expectedId, CancellationToken ct)
     {
-        (IAvatarInfo avatarInfo, List<Parameter> relevantParameters)? newAvatar;
+        IAvatarInfo avatarInfo;
+        List<Parameter> parameters;
         if (multicastDnsService.VrchatClientEndpoint != null)
         {
-            newAvatar = await oscQueryConfigParser.ParseAvatar("");
+            var (outcome, id, info, list) = await oscQueryConfigParser.LoadAvatar(expectedId, ct);
+            if (outcome != AvatarLoadOutcome.Loaded)
+            {
+                return new AvatarLoadResult(outcome, id);
+            }
+
+            avatarInfo = info!;
+            parameters = list!;
         }
         else
         {
-            // handle normal osc
-            newAvatar = await avatarConfigParser.ParseAvatar(newId);
-        }
+            // Plain OSC (VRChat never found over mDNS): the config file VRChat writes for the id
+            // the message named. Nothing to compare against, so never Stale.
+            if (string.IsNullOrEmpty(expectedId))
+            {
+                return new AvatarLoadResult(AvatarLoadOutcome.Failed, null);
+            }
 
-        if (!newAvatar.HasValue)
-        {
-            return;
+            var parsed = await avatarConfigParser.ParseAvatar(expectedId);
+            if (!parsed.HasValue)
+            {
+                return new AvatarLoadResult(AvatarLoadOutcome.Failed, null);
+            }
+
+            (avatarInfo, parameters) = parsed.Value;
         }
 
         // Parsing success. Deregister callback and update values
         httpHandler.OnHostInfoQueried -= HandleNewAvatarWrapper;
+        // The id was only in the log for native face tracking avatars; a stuck avatar needs it
+        logger.LogInformation("Avatar loaded: {name} ({id}), {kind}", avatarInfo.Name, avatarInfo.Id,
+            avatarInfo.FullFaceTracking ? "native face tracking" : $"{parameters.Count} parameters");
         dispatcherService.Run(() =>
         {
-            AvatarInfo = newAvatar.Value.avatarInfo;
-            AvatarParameters = newAvatar.Value.relevantParameters;
+            AvatarInfo = avatarInfo;
+            AvatarParameters = parameters;
         });
+
+        return new AvatarLoadResult(AvatarLoadOutcome.Loaded, avatarInfo.Id);
     }
 
-    private void HandleNewAvatarWrapper() => HandleNewAvatar(); // Helper func used in callbacks
-    
+    // VRChat asked for our host info: until the first load worked, a sign it's ready now
+    private void HandleNewAvatarWrapper() => _avatarSync?.Request(null);
+
 
     private void HandleNewMessage(OscMessage msg)
     {
         switch (msg.Address)
         {
             case "/avatar/change":
-                HandleNewAvatar(msg.Value as string);
+                // Copied out now: the message is released once this handler returns
+                _avatarSync?.Request(msg.Value as string);
                 break;
             case "/vrcft/settings/forceRelevant":   // Endpoint for external tools to force vrcft to send all parameters
                 if (msg.Value is bool relevancy)
